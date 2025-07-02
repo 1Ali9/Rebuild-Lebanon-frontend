@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = process.env.VITE_API_URL || 'http://localhost:3500/api';
+const API_URL = process.env.VITE_API_URL || "http://localhost:3500/api";
 
 const api = axios.create({
   baseURL: API_URL,
@@ -108,13 +108,9 @@ export const messagesAPI = {
   },
   getMessages: async (conversationId) => {
     try {
-<<<<<<< HEAD
-      const response = await api.get(`/messages/${conversationId}`);
-=======
       const response = await api.get(
         `/messages/conversation/${conversationId}`
       );
->>>>>>> 2096844 (Modified api endpoint in api.js)
       return response;
     } catch (error) {
       throw error.response?.data || { message: "Failed to fetch messages" };
@@ -143,13 +139,9 @@ export const messagesAPI = {
 };
 
 export const managedAPI = {
-  addClient: async (clientName) => {
+  addClient: async (clientId) => {
     try {
-<<<<<<< HEAD
-      const response = await api.post('/managed/add-client', { clientName });
-=======
       const response = await api.post("/managed/clients", { clientId });
->>>>>>> 2096844 (Modified api endpoint in api.js)
       return response;
     } catch (error) {
       throw error.response?.data || { message: "Failed to add client" };
@@ -185,13 +177,9 @@ export const managedAPI = {
       );
     }
   },
-  addSpecialist: async (specialistName) => {
+  addSpecialist: async (specialistId) => {
     try {
-<<<<<<< HEAD
-      const response = await api.post('/managed/add-specialist', { specialistName });
-=======
       const response = await api.post("/managed/specialists", { specialistId });
->>>>>>> 2096844 (Modified api endpoint in api.js)
       return response;
     } catch (error) {
       throw error.response?.data || { message: "Failed to add specialist" };
