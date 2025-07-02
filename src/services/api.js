@@ -1,8 +1,7 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_URL = process.env.VITE_API_URL || 'http://localhost:3500/api';
 
-// Create axios instance with default config
 const api = axios.create({
   baseURL: API_URL,
   headers: {
@@ -10,7 +9,6 @@ const api = axios.create({
   },
 });
 
-// Add auth token to requests if available
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -19,7 +17,6 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Auth API
 export const authAPI = {
   login: async (credentials) => {
     try {
@@ -29,7 +26,6 @@ export const authAPI = {
       throw error.response?.data || { message: 'Login failed' };
     }
   },
-
   register: async (userData) => {
     try {
       const response = await api.post('/auth/register', userData);
@@ -38,7 +34,6 @@ export const authAPI = {
       throw error.response?.data || { message: 'Registration failed' };
     }
   },
-
   logout: async () => {
     try {
       const response = await api.post('/auth/logout');
@@ -47,7 +42,6 @@ export const authAPI = {
       throw error.response?.data || { message: 'Logout failed' };
     }
   },
-
   verifyToken: async () => {
     try {
       const response = await api.get('/auth/verify');
@@ -58,7 +52,6 @@ export const authAPI = {
   },
 };
 
-// Users API
 export const usersAPI = {
   getSpecialists: async (filters) => {
     try {
@@ -68,7 +61,6 @@ export const usersAPI = {
       throw error.response?.data || { message: 'Failed to fetch specialists' };
     }
   },
-
   getClients: async (filters) => {
     try {
       const response = await api.get('/users/clients', { params: filters });
@@ -77,7 +69,6 @@ export const usersAPI = {
       throw error.response?.data || { message: 'Failed to fetch clients' };
     }
   },
-
   updateNeededSpecialists: async (specialists) => {
     try {
       const response = await api.put('/users/needed-specialists', { specialists });
@@ -86,7 +77,6 @@ export const usersAPI = {
       throw error.response?.data || { message: 'Failed to update needed specialists' };
     }
   },
-
   updateAvailability: async (isAvailable) => {
     try {
       const response = await api.put('/users/availability', { isAvailable });
@@ -97,7 +87,6 @@ export const usersAPI = {
   },
 };
 
-// Messages API
 export const messagesAPI = {
   getConversations: async () => {
     try {
@@ -107,16 +96,14 @@ export const messagesAPI = {
       throw error.response?.data || { message: 'Failed to fetch conversations' };
     }
   },
-
   getMessages: async (conversationId) => {
     try {
-      const response = await api.get(`/messages/conversation/${conversationId}`);
+      const response = await api.get(`/messages/${conversationId}`);
       return response;
     } catch (error) {
       throw error.response?.data || { message: 'Failed to fetch messages' };
     }
   },
-
   sendMessage: async (data) => {
     try {
       const response = await api.post('/messages', data);
@@ -125,7 +112,6 @@ export const messagesAPI = {
       throw error.response?.data || { message: 'Failed to send message' };
     }
   },
-
   createConversation: async (participantName) => {
     try {
       const response = await api.post('/messages/conversation', { participantName });
@@ -136,17 +122,15 @@ export const messagesAPI = {
   },
 };
 
-// Managed Lists API
 export const managedAPI = {
-  addClient: async (clientId) => {
+  addClient: async (clientName) => {
     try {
-      const response = await api.post('/managed/clients', { clientId });
+      const response = await api.post('/managed/add-client', { clientName });
       return response;
     } catch (error) {
       throw error.response?.data || { message: 'Failed to add client' };
     }
   },
-
   removeClient: async (clientId) => {
     try {
       const response = await api.delete(`/managed/clients/${clientId}`);
@@ -155,7 +139,6 @@ export const managedAPI = {
       throw error.response?.data || { message: 'Failed to remove client' };
     }
   },
-
   updateClientStatus: async (clientId, isDone) => {
     try {
       const response = await api.put(`/managed/clients/${clientId}/status`, { isDone });
@@ -164,7 +147,6 @@ export const managedAPI = {
       throw error.response?.data || { message: 'Failed to update client status' };
     }
   },
-
   getManagedClients: async () => {
     try {
       const response = await api.get('/managed/clients');
@@ -173,16 +155,14 @@ export const managedAPI = {
       throw error.response?.data || { message: 'Failed to fetch managed clients' };
     }
   },
-
-  addSpecialist: async (specialistId) => {
+  addSpecialist: async (specialistName) => {
     try {
-      const response = await api.post('/managed/specialists', { specialistId });
+      const response = await api.post('/managed/add-specialist', { specialistName });
       return response;
     } catch (error) {
       throw error.response?.data || { message: 'Failed to add specialist' };
     }
   },
-
   removeSpecialist: async (specialistId) => {
     try {
       const response = await api.delete(`/managed/specialists/${specialistId}`);
@@ -191,7 +171,6 @@ export const managedAPI = {
       throw error.response?.data || { message: 'Failed to remove specialist' };
     }
   },
-
   updateSpecialistStatus: async (specialistId, isDone) => {
     try {
       const response = await api.put(`/managed/specialists/${specialistId}/status`, { isDone });
@@ -200,7 +179,6 @@ export const managedAPI = {
       throw error.response?.data || { message: 'Failed to update specialist status' };
     }
   },
-
   getManagedSpecialists: async () => {
     try {
       const response = await api.get('/managed/specialists');

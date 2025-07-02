@@ -4,19 +4,19 @@ import { useState, useEffect } from "react"
 import { Link, useParams, useNavigate } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import { useData } from "../contexts/DataContext"
-import { messagesAPI, managedAPI } from "../services/api"
+import { messagesAPI, managedAPI, usersAPI } from "../services/api"
 
 const Chat = () => {
   const { participantName } = useParams()
   const { user } = useAuth()
   const { managedSpecialists, setManagedSpecialists, managedClients, setManagedClients } = useData()
   const navigate = useNavigate()
-
   const [messages, setMessages] = useState([])
   const [newMessage, setNewMessage] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [conversationId, setConversationId] = useState(null)
+  const [participant, setParticipant] = useState(null)
 
   useEffect(() => {
     if (participantName) {
@@ -27,6 +27,14 @@ const Chat = () => {
   const initializeChat = async () => {
     try {
       setLoading(true)
+      const userResponse = user.role === "client" 
+        ? await usersAPI.getSpecialists({ fullname: participantName })
+        : await usersAPI.getClients({ fullname: participantName })
+      const foundParticipant = userResponse.data.users[0]
+      if (!foundParticipant) {
+        throw new Error("Participant not found")
+      }
+      setParticipant(foundParticipant)
       const response = await messagesAPI.createConversation(participantName)
       setConversationId(response.data.conversationId)
       setMessages(response.data.messages || [])
@@ -40,7 +48,6 @@ const Chat = () => {
 
   const sendMessage = async () => {
     if (!newMessage.trim()) return
-
     try {
       setLoading(true)
       const response = await messagesAPI.sendMessage({
@@ -48,7 +55,6 @@ const Chat = () => {
         message: newMessage,
         conversationId,
       })
-
       setMessages((prev) => [...prev, response.data.message])
       setNewMessage("")
     } catch (error) {
@@ -69,33 +75,11 @@ const Chat = () => {
   const addToManagedList = async () => {
     try {
       if (user.role === "client") {
-        // Add specialist to managed list
-        await managedAPI.addSpecialist(participantName)
-        // You would need to fetch the specialist details here
-        // For now, we'll create a mock entry
-        const newManagedSpecialist = {
-          _id: Date.now().toString(),
-          fullname: participantName,
-          governorate: "Unknown",
-          district: "Unknown",
-          specialty: "Unknown",
-          isDone: false,
-          dateAdded: new Date(),
-          isAvailable: true,
-        }
-        setManagedSpecialists((prev) => [...prev, newManagedSpecialist])
+        const response = await managedAPI.addSpecialist(participantName)
+        setManagedSpecialists((prev) => [...prev, response.data.specialist])
       } else {
-        // Add client to managed list
-        await managedAPI.addClient(participantName)
-        const newManagedClient = {
-          _id: Date.now().toString(),
-          fullname: participantName,
-          governorate: "Unknown",
-          district: "Unknown",
-          isDone: false,
-          dateAdded: new Date(),
-        }
-        setManagedClients((prev) => [...prev, newManagedClient])
+        const response = await managedAPI.addClient(participantName)
+        setManagedClients((prev) => [...prev, response.data.client])
       }
     } catch (error) {
       setError("Failed to add to managed list")
@@ -107,7 +91,7 @@ const Chat = () => {
     if (user.role === "client") {
       return managedSpecialists.some((ms) => ms.fullname === participantName)
     } else {
-      return managedClients.some((mc) => mc.fullname === participantName)
+      return managedClients.some((mc) => ms.fullname === participantName)
     }
   }
 
@@ -135,7 +119,6 @@ const Chat = () => {
           </div>
           <div className="chat-content">
             {error && <div className="error-message">{error}</div>}
-
             <div className="chat-messages">
               {messages.map((message) => (
                 <div
@@ -149,7 +132,6 @@ const Chat = () => {
                 </div>
               ))}
             </div>
-
             <div className="chat-input">
               <input
                 type="text"
