@@ -1,11 +1,6 @@
 import axios from "axios";
 
-<<<<<<< HEAD
 const API_URL = process.env.VITE_API_URL || 'http://localhost:3500/api';
-=======
-// eslint-disable-next-line no-undef
-const API_URL = process.env.VITE_API_URL || "http://localhost:3500/api";
->>>>>>> 2096844 (Modified api endpoint in api.js)
 
 const api = axios.create({
   baseURL: API_URL,
