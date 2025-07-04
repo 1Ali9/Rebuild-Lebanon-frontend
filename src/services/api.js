@@ -1,230 +1,147 @@
 import axios from "axios";
 
-const API_URL = process.env.VITE_API_URL || "http://localhost:3500/api";
+// Configuration
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3500/api";
 
-const api = axios.create({
+// Create main axios instance
+const axiosInstance = axios.create({
   baseURL: API_URL,
   headers: {
     "Content-Type": "application/json",
+    "Accept": "application/json"
   },
+  timeout: 10000, // 10 seconds timeout
+  withCredentials: true // Enable cookies if needed
 });
 
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+/**
+ * Request Interceptor
+ * - Adds auth token to requests
+ * - Handles request errors
+ */
+axiosInstance.interceptors.request.use(
+  (config) => {
+    // Only attempt to add token if we're not calling auth endpoints
+    if (!config.url?.includes('/auth')) {
+      const token = localStorage.getItem("token");
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
+    return config;
+  },
+  (error) => {
+    console.error("Request error:", error);
+    return Promise.reject(error);
   }
-  return config;
-});
+);
 
+/**
+ * Response Interceptor
+ * - Handles common error responses
+ * - Manages token expiration
+ */
+axiosInstance.interceptors.response.use(
+  (response) => {
+    // Successful response - just pass through
+    return response;
+  },
+  (error) => {
+    const originalRequest = error.config;
+    
+    // Handle token expiration (401)
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      localStorage.removeItem("token");
+      window.location.href = "/login";
+    }
+
+    // Format consistent error response
+    const formattedError = {
+      message: error.response?.data?.message || error.message || "Request failed",
+      code: error.response?.status || error.code || "UNKNOWN_ERROR",
+      data: error.response?.data,
+      originalError: error
+    };
+
+    console.error("API Error:", formattedError);
+    return Promise.reject(formattedError);
+  }
+);
+
+// Helper function to create API endpoints
+const createEndpoint = (method, endpoint, defaultError) => {
+  return async (data = null, params = null) => {
+    try {
+      const response = await axiosInstance({
+        method,
+        url: endpoint,
+        data,
+        params
+      });
+      return response.data;
+    } catch (error) {
+      const errorMessage = error.message || defaultError;
+      console.error(`API ${method.toUpperCase()} ${endpoint} failed:`, error);
+      throw { 
+        ...error,
+        message: errorMessage,
+        endpoint,
+        method
+      };
+    }
+  };
+};
+
+// Auth API Endpoints
 export const authAPI = {
-  login: async (credentials) => {
-    try {
-      const response = await api.post("/auth/login", credentials);
-      return response;
-    } catch (error) {
-      throw error.response?.data || { message: "Login failed" };
-    }
-  },
-  register: async (userData) => {
-    try {
-      const response = await api.post("/auth/register", userData);
-      return response;
-    } catch (error) {
-      throw error.response?.data || { message: "Registration failed" };
-    }
-  },
-  logout: async () => {
-    try {
-      const response = await api.post("/auth/logout");
-      return response;
-    } catch (error) {
-      throw error.response?.data || { message: "Logout failed" };
-    }
-  },
-  verifyToken: async () => {
-    try {
-      const response = await api.get("/auth/verify");
-      return response;
-    } catch (error) {
-      throw error.response?.data || { message: "Token verification failed" };
-    }
-  },
+  login: createEndpoint('post', '/auth/login', 'Login failed'),
+  register: createEndpoint('post', '/auth/register', 'Registration failed'),
+  logout: createEndpoint('post', '/auth/logout', 'Logout failed'),
+  verifyToken: createEndpoint('get', '/auth/verify', 'Token verification failed'),
+  refreshToken: createEndpoint('post', '/auth/refresh', 'Token refresh failed')
 };
 
+// Users API Endpoints
 export const usersAPI = {
-  getSpecialists: async (filters) => {
-    try {
-      const response = await api.get("/users/specialists", { params: filters });
-      return response;
-    } catch (error) {
-      throw error.response?.data || { message: "Failed to fetch specialists" };
-    }
-  },
-  getClients: async (filters) => {
-    try {
-      const response = await api.get("/users/clients", { params: filters });
-      return response;
-    } catch (error) {
-      throw error.response?.data || { message: "Failed to fetch clients" };
-    }
-  },
-  updateNeededSpecialists: async (specialists) => {
-    try {
-      const response = await api.put("/users/needed-specialists", {
-        specialists,
-      });
-      return response;
-    } catch (error) {
-      throw (
-        error.response?.data || {
-          message: "Failed to update needed specialists",
-        }
-      );
-    }
-  },
-  updateAvailability: async (isAvailable) => {
-    try {
-      const response = await api.put("/users/availability", { isAvailable });
-      return response;
-    } catch (error) {
-      throw (
-        error.response?.data || { message: "Failed to update availability" }
-      );
-    }
-  },
+  getProfile: createEndpoint('get', '/users/profile', 'Failed to fetch profile'),
+  getSpecialists: createEndpoint('get', '/users/specialists', 'Failed to fetch specialists'),
+  getClients: createEndpoint('get', '/users/clients', 'Failed to fetch clients'),
+  updateProfile: createEndpoint('put', '/users/profile', 'Failed to update profile'),
+  updateNeededSpecialists: createEndpoint('put', '/users/needed-specialists', 'Failed to update specialists'),
+  updateAvailability: createEndpoint('put', '/users/availability', 'Failed to update availability')
 };
 
+// Messages API Endpoints
 export const messagesAPI = {
-  getConversations: async () => {
-    try {
-      const response = await api.get("/messages/conversations");
-      return response;
-    } catch (error) {
-      throw (
-        error.response?.data || { message: "Failed to fetch conversations" }
-      );
-    }
-  },
-  getMessages: async (conversationId) => {
-    try {
-      const response = await api.get(
-        `/messages/conversation/${conversationId}`
-      );
-      return response;
-    } catch (error) {
-      throw error.response?.data || { message: "Failed to fetch messages" };
-    }
-  },
-  sendMessage: async (data) => {
-    try {
-      const response = await api.post("/messages", data);
-      return response;
-    } catch (error) {
-      throw error.response?.data || { message: "Failed to send message" };
-    }
-  },
-  createConversation: async (participantName) => {
-    try {
-      const response = await api.post("/messages/conversation", {
-        participantName,
-      });
-      return response;
-    } catch (error) {
-      throw (
-        error.response?.data || { message: "Failed to create conversation" }
-      );
-    }
-  },
+  getConversations: createEndpoint('get', '/messages/conversations', 'Failed to fetch conversations'),
+  getMessages: createEndpoint('get', '/messages/conversation/:id', 'Failed to fetch messages'),
+  sendMessage: createEndpoint('post', '/messages', 'Failed to send message'),
+  createConversation: createEndpoint('post', '/messages/conversations', 'Failed to create conversation'),
+  markAsRead: createEndpoint('patch', '/messages/:id/read', 'Failed to mark as read')
 };
 
+// Managed API Endpoints
 export const managedAPI = {
-  addClient: async (clientId) => {
-    try {
-      const response = await api.post("/managed/clients", { clientId });
-      return response;
-    } catch (error) {
-      throw error.response?.data || { message: "Failed to add client" };
-    }
-  },
-  removeClient: async (clientId) => {
-    try {
-      const response = await api.delete(`/managed/clients/${clientId}`);
-      return response;
-    } catch (error) {
-      throw error.response?.data || { message: "Failed to remove client" };
-    }
-  },
-  updateClientStatus: async (clientId, isDone) => {
-    try {
-      const response = await api.put(`/managed/clients/${clientId}/status`, {
-        isDone,
-      });
-      return response;
-    } catch (error) {
-      throw (
-        error.response?.data || { message: "Failed to update client status" }
-      );
-    }
-  },
-  getManagedClients: async () => {
-    try {
-      const response = await api.get("/managed/clients");
-      return response;
-    } catch (error) {
-      throw (
-        error.response?.data || { message: "Failed to fetch managed clients" }
-      );
-    }
-  },
-  addSpecialist: async (specialistId) => {
-    try {
-      const response = await api.post("/managed/specialists", { specialistId });
-      return response;
-    } catch (error) {
-      throw error.response?.data || { message: "Failed to add specialist" };
-    }
-  },
-  removeSpecialist: async (specialistId) => {
-    try {
-      const response = await api.delete(`/managed/specialists/${specialistId}`);
-      return response;
-    } catch (error) {
-      throw error.response?.data || { message: "Failed to remove specialist" };
-    }
-  },
-  updateSpecialistStatus: async (specialistId, isDone) => {
-    try {
-      const response = await api.put(
-        `/managed/specialists/${specialistId}/status`,
-        { isDone }
-      );
-      return response;
-    } catch (error) {
-      throw (
-        error.response?.data || {
-          message: "Failed to update specialist status",
-        }
-      );
-    }
-  },
-  getManagedSpecialists: async () => {
-    try {
-      const response = await api.get("/managed/specialists");
-      return response;
-    } catch (error) {
-      throw (
-        error.response?.data || {
-          message: "Failed to fetch managed specialists",
-        }
-      );
-    }
-  },
+  addClient: createEndpoint('post', '/managed/clients', 'Failed to add client'),
+  removeClient: createEndpoint('delete', '/managed/clients/:id', 'Failed to remove client'),
+  updateClientStatus: createEndpoint('patch', '/managed/clients/:id/status', 'Failed to update client status'),
+  getManagedClients: createEndpoint('get', '/managed/clients', 'Failed to fetch clients'),
+  addSpecialist: createEndpoint('post', '/managed/specialists', 'Failed to add specialist'),
+  removeSpecialist: createEndpoint('delete', '/managed/specialists/:id', 'Failed to remove specialist'),
+  updateSpecialistStatus: createEndpoint('patch', '/managed/specialists/:id/status', 'Failed to update specialist status'),
+  getManagedSpecialists: createEndpoint('get', '/managed/specialists', 'Failed to fetch specialists'),
+  getStatistics: createEndpoint('get', '/managed/statistics', 'Failed to fetch statistics')
 };
 
+// Export the axios instance directly
+export { axiosInstance };
+
+// Default export for backward compatibility
 export default {
+  axiosInstance,
   authAPI,
   usersAPI,
   messagesAPI,
-  managedAPI,
+  managedAPI
 };

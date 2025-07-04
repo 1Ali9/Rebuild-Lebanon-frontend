@@ -1,139 +1,156 @@
-import { createContext, useContext, useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
+import { createContext, useContext, useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { authAPI } from "../services/api";
 
-const AuthContext = createContext()
+const AuthContext = createContext();
 
 export const useAuth = () => {
-  const context = useContext(AuthContext)
+  const context = useContext(AuthContext);
   if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider")
+    throw new Error("useAuth must be used within an AuthProvider");
   }
-  return context
-}
+  return context;
+};
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-  const navigate = useNavigate()
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [error, setError] = useState("");
+  const navigate = useNavigate();
 
+  // Verify token and initialize auth state
   useEffect(() => {
-    const verifyToken = async () => {
-      const token = localStorage.getItem("token")
-      if (!token) {
-        setLoading(false)
-        return
-      }
+    let isMounted = true;
+
+    const initializeAuth = async () => {
       try {
-        const response = await fetch(`${process.env.VITE_API_URL}/auth/verify`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-        const data = await response.json()
-        if (!response.ok) {
-          throw new Error(data.message || "Token verification failed")
+        const token = localStorage.getItem("token");
+        if (!token) {
+          isMounted && setInitialLoading(false);
+          return;
         }
-        setUser(data.user)
+
+        const userData = await authAPI.verifyToken();
+        if (isMounted && userData?.user) {
+          setUser(userData.user);
+        } else {
+          handleCleanup();
+        }
       } catch (err) {
-        setError(err.message)
-        localStorage.removeItem("token")
-        setUser(null)
+        handleCleanup(err);
       } finally {
-        setLoading(false)
+        isMounted && setInitialLoading(false);
       }
+    };
+
+    initializeAuth();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleAuthSuccess = (response) => {
+    const { token, user } = response;
+    localStorage.setItem("token", token);
+    setUser(user);
+    return user;
+  };
+
+  const handleCleanup = (error = null) => {
+    localStorage.removeItem("token");
+    setUser(null);
+    if (error) {
+      console.error("Auth error:", error);
+      setError(error.message || "Session expired");
     }
-    verifyToken()
-  }, [])
+  };
+
+  const redirectByRole = (role) => {
+    navigate(role === "specialist" 
+      ? "/specialist-dashboard" 
+      : "/client-dashboard",
+      { replace: true }
+    );
+  };
 
   const login = async (credentials) => {
     try {
-      setLoading(true)
-      setError("")
-      const response = await fetch(`${process.env.VITE_API_URL}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(credentials),
-      })
-      const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.message || "Login failed")
-      }
-      localStorage.setItem("token", data.token)
-      setUser(data.user)
-      navigate(data.user.role === "specialist" ? "/specialist-dashboard" : "/client-dashboard")
-      return data
+      setLoading(true);
+      setError("");
+      const response = await authAPI.login(credentials);
+      const user = handleAuthSuccess(response);
+      redirectByRole(user.role);
+      return user;
     } catch (error) {
-      setError(error.message || "Login failed")
-      throw error
+      setError(error.message || "Login failed");
+      throw error;
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const register = async (userData) => {
     try {
-      setLoading(true)
-      setError("")
-      const response = await fetch(`${process.env.VITE_API_URL}/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(userData),
-      })
-      const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.message || "Registration failed")
-      }
-      localStorage.setItem("token", data.token)
-      setUser(data.user)
-      navigate(data.user.role === "specialist" ? "/specialist-dashboard" : "/client-dashboard")
-      return data
+      setLoading(true);
+      setError("");
+      const response = await authAPI.register(userData);
+      const user = handleAuthSuccess(response);
+      redirectByRole(user.role);
+      return user;
     } catch (error) {
-      setError(error.message || "Registration failed")
-      throw error
+      setError(error.message || "Registration failed");
+      throw error;
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const logout = async () => {
     try {
-      setLoading(true)
-      setError("")
-      const response = await fetch(`${process.env.VITE_API_URL}/auth/logout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      })
-      if (!response.ok) {
-        throw new Error("Logout failed")
-      }
-      localStorage.removeItem("token")
-      setUser(null)
-      navigate("/")
-    } catch (error) {
-      setError(error.message || "Logout failed")
+      setLoading(true);
+      await authAPI.logout();
     } finally {
-      setLoading(false)
+      handleCleanup();
+      navigate("/", { replace: true });
+      setLoading(false);
     }
-  }
+  };
 
-  const updateUser = (updatedUser) => {
-    setUser(updatedUser)
-  }
+  const refreshAuth = async () => {
+    try {
+      const response = await authAPI.verifyToken();
+      if (response?.user) {
+        setUser(response.user);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      handleCleanup(error);
+      return false;
+    }
+  };
 
-  const value = {
+  const updateUser = (updatedData) => {
+    setUser(prev => ({ ...prev, ...updatedData }));
+  };
+
+  const value = useMemo(() => ({
     user,
-    loading,
+    loading: loading || initialLoading,
     error,
-    setError,
     login,
     register,
     logout,
+    refreshAuth,
     updateUser,
-  }
+    setError
+  }), [user, loading, initialLoading, error]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
+  return (
+    <AuthContext.Provider value={value}>
+      {!initialLoading && children}
+    </AuthContext.Provider>
+  );
+};
