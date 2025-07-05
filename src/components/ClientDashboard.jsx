@@ -1,18 +1,42 @@
 "use client"
 
-import { useState } from "react"
-import { Link } from "react-router-dom"
-import { useAuth } from "../contexts/AuthContext"
-import { useData } from "../contexts/DataContext"
+import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
+import { useData } from "../contexts/DataContext";
 
 const ClientDashboard = () => {
-  const { user, logout } = useAuth()
-  const { managedSpecialists } = useData()
-  const [showLogoutDialog, setShowLogoutDialog] = useState(false)
+  const { user, logout, loading: authLoading } = useAuth();
+  const { managedSpecialists } = useData();
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Debug: Log the user object to verify data
+    console.log("Current user data:", user);
+    
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [user]); // Added user to dependency array
 
   const handleLogout = () => {
-    logout()
-    setShowLogoutDialog(false)
+    logout();
+    setShowLogoutDialog(false);
+  };
+
+  if (authLoading || isLoading) {
+    return (
+      <div className="app-container">
+        <div className="loading-overlay">
+          <div className="loading-spinner">
+            <div className="spinner"></div>
+            <p>Loading your dashboard...</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -25,74 +49,105 @@ const ClientDashboard = () => {
                 <h2>👥 Client Dashboard</h2>
                 <p>Welcome to your client portal</p>
               </div>
-              <button className="btn btn-nav" onClick={() => setShowLogoutDialog(true)}>
+              <button
+                className="btn btn-nav"
+                onClick={() => setShowLogoutDialog(true)}
+                aria-label="Logout"
+              >
                 Logout
               </button>
             </div>
           </div>
+
           <div className="card-content">
+            {/* User Welcome Section */}
             <div className="user-welcome">
-              <h3>Welcome, {user?.fullname}! 👋</h3>
-              <div className="user-details">
-                <div>
+              <h3>Welcome, {user?.fullname || 'Client'}! 👋</h3>
+              <div className="user-details-grid">
+                <div className="detail-item">
                   <strong>Governorate:</strong>
-                  <p>{user?.governorate}</p>
+                  <p className="detail-value" data-testid="governorate-value">
+                    {user?.governorate || 'Not specified'}
+                  </p>
                 </div>
-                <div>
+                <div className="detail-item">
                   <strong>District:</strong>
-                  <p>{user?.district}</p>
+                  <p className="detail-value" data-testid="district-value">
+                    {user?.district || 'Not specified'}
+                  </p>
                 </div>
-                <div>
+                <div className="detail-item">
                   <strong>Role:</strong>
-                  <p>Client</p>
+                  <p className="detail-value">Client</p>
                 </div>
               </div>
             </div>
 
+            {/* Dashboard Features Grid */}
             <div className="dashboard-grid">
+              {/* Find Specialists Card */}
               <div className="dashboard-item">
                 <div className="dashboard-item-header">
                   <h3>🔍 Find Specialists</h3>
                 </div>
                 <div className="dashboard-item-content">
                   <p>Search for specialists in your area with advanced filters</p>
-                  <Link to="/browse-specialists" className="btn btn-primary full-width">
+                  <Link
+                    to="/browse-specialists"
+                    className="btn btn-primary full-width"
+                    aria-label="Browse specialists"
+                  >
                     Browse Specialists
                   </Link>
                 </div>
               </div>
 
+              {/* Needed Specialists Card */}
               <div className="dashboard-item">
                 <div className="dashboard-item-header">
                   <h3>📋 Needed Specialists</h3>
                 </div>
                 <div className="dashboard-item-content">
                   <p>Manage your required specialist types</p>
-                  <Link to="/needed-specialists" className="btn btn-black full-width">
+                  <Link
+                    to="/needed-specialists"
+                    className="btn btn-black full-width"
+                    aria-label="Manage needed specialists"
+                  >
                     Manage Specialists
                   </Link>
                 </div>
               </div>
 
+              {/* Manage Specialists Card */}
               <div className="dashboard-item">
                 <div className="dashboard-item-header">
                   <h3>🔧 Manage Specialists</h3>
                 </div>
                 <div className="dashboard-item-content">
-                  <p>Manage your current specialist list ({managedSpecialists.length} specialists)</p>
-                  <Link to="/manage-specialists" className="btn btn-black full-width">
+                  <p>Manage your current specialist list ({managedSpecialists.length})</p>
+                  <Link
+                    to="/manage-specialists"
+                    className="btn btn-black full-width"
+                    aria-label="Manage specialist list"
+                  >
                     Manage Specialist List
                   </Link>
                 </div>
               </div>
 
+              {/* Messages Card */}
               <div className="dashboard-item full-width">
                 <div className="dashboard-item-header">
                   <h3>💬 Messages</h3>
                 </div>
                 <div className="dashboard-item-content">
                   <p>View your conversations with specialists</p>
-                  <Link to="/conversations" className="btn btn-black full-width">
+                  <Link
+                    to="/conversations"
+                    className="btn btn-black full-width"
+                    aria-label="View messages"
+                  >
                     View Messages
                   </Link>
                 </div>
@@ -113,10 +168,18 @@ const ClientDashboard = () => {
               <p>Are you sure you want to logout? You will be redirected to the welcome page.</p>
             </div>
             <div className="modal-actions">
-              <button className="btn btn-nav" onClick={() => setShowLogoutDialog(false)}>
+              <button
+                className="btn btn-nav"
+                onClick={() => setShowLogoutDialog(false)}
+                aria-label="Cancel logout"
+              >
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={handleLogout}>
+              <button
+                className="btn btn-primary"
+                onClick={handleLogout}
+                aria-label="Confirm logout"
+              >
                 Yes, Logout
               </button>
             </div>
@@ -124,7 +187,7 @@ const ClientDashboard = () => {
         </div>
       )}
     </div>
-  )
-}
+  );
+};
 
-export default ClientDashboard
+export default ClientDashboard;

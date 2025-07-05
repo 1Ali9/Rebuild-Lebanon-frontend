@@ -27,17 +27,33 @@ const BrowseSpecialists = () => {
   }, [filters])
 
   const fetchSpecialists = async () => {
-    try {
-      setLoading(true)
-      const response = await usersAPI.getSpecialists(filters)
-      setSpecialists(response.data.specialists || [])
-    } catch (error) {
-      setError("Failed to fetch specialists")
-      console.error("Error fetching specialists:", error)
-    } finally {
-      setLoading(false)
-    }
+  try {
+    setLoading(true);
+    setError("");
+    
+    // Prepare query params from filters
+    const params = {
+      governorate: filters.governorate || undefined,
+      district: filters.district || undefined,
+      specialty: filters.specialty || undefined,
+      isAvailable: filters.availableOnly || undefined
+    };
+
+    // Clean undefined params
+    Object.keys(params).forEach(key => params[key] === undefined && delete params[key]);
+
+    const response = await usersAPI.getSpecialists(params);
+    
+    // Handle both array response and object with specialists property
+    setSpecialists(Array.isArray(response.data) ? response.data : response.data?.specialists || []);
+  } catch (error) {
+    setError("Failed to fetch specialists");
+    console.error("Error fetching specialists:", error);
+    setSpecialists([]); // Reset specialists on error
+  } finally {
+    setLoading(false);
   }
+};
 
   const addSpecialistToManaged = async (specialist) => {
     const isAlreadyManaged = managedSpecialists.some((ms) => ms._id === specialist._id)

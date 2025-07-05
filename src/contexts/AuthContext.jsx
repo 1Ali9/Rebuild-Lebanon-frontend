@@ -12,6 +12,26 @@ export const useAuth = () => {
   return context;
 };
 
+// Helper function to clean user data based on role
+const sanitizeUserData = (userData) => {
+  if (!userData) return userData;
+
+  const cleanedData = { ...userData };
+
+  // Remove specialist-specific fields for non-specialists
+  if (cleanedData.role !== 'specialist') {
+    cleanedData.isAvailable = undefined;
+    cleanedData.specialty = undefined;
+  }
+
+  // Ensure clients have neededSpecialists array
+  if (cleanedData.role === 'client' && !cleanedData.neededSpecialists) {
+    cleanedData.neededSpecialists = [];
+  }
+
+  return cleanedData;
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -33,7 +53,7 @@ export const AuthProvider = ({ children }) => {
 
         const userData = await authAPI.verifyToken();
         if (isMounted && userData?.user) {
-          setUser(userData.user);
+          setUser(sanitizeUserData(userData.user));
         } else {
           handleCleanup();
         }
@@ -53,9 +73,11 @@ export const AuthProvider = ({ children }) => {
 
   const handleAuthSuccess = (response) => {
     const { token, user } = response;
+    const cleanedUser = sanitizeUserData(user);
+    
     localStorage.setItem("token", token);
-    setUser(user);
-    return user;
+    setUser(cleanedUser);
+    return cleanedUser;
   };
 
   const handleCleanup = (error = null) => {
@@ -95,7 +117,8 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true);
       setError("");
-      const response = await authAPI.register(userData);
+      const cleanedData = sanitizeUserData(userData);
+      const response = await authAPI.register(cleanedData);
       const user = handleAuthSuccess(response);
       redirectByRole(user.role);
       return user;
@@ -122,7 +145,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await authAPI.verifyToken();
       if (response?.user) {
-        setUser(response.user);
+        setUser(sanitizeUserData(response.user));
         return true;
       }
       return false;
@@ -133,7 +156,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateUser = (updatedData) => {
-    setUser(prev => ({ ...prev, ...updatedData }));
+    setUser(prev => sanitizeUserData({
+      ...prev,
+      ...updatedData
+    }));
   };
 
   const value = useMemo(() => ({

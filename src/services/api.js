@@ -1,27 +1,21 @@
 import axios from "axios";
 
-// Configuration
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3500/api";
 
-// Create main axios instance
+// Create axios instance with default configuration
 const axiosInstance = axios.create({
   baseURL: API_URL,
   headers: {
     "Content-Type": "application/json",
     "Accept": "application/json"
   },
-  timeout: 10000, // 10 seconds timeout
-  withCredentials: true // Enable cookies if needed
+  timeout: 10000,
+  withCredentials: true
 });
 
-/**
- * Request Interceptor
- * - Adds auth token to requests
- * - Handles request errors
- */
+// Request interceptor for adding auth token
 axiosInstance.interceptors.request.use(
   (config) => {
-    // Only attempt to add token if we're not calling auth endpoints
     if (!config.url?.includes('/auth')) {
       const token = localStorage.getItem("token");
       if (token) {
@@ -36,56 +30,94 @@ axiosInstance.interceptors.request.use(
   }
 );
 
-/**
- * Response Interceptor
- * - Handles common error responses
- * - Manages token expiration
- */
+// Enhanced response interceptor
 axiosInstance.interceptors.response.use(
   (response) => {
-    // Successful response - just pass through
-    return response;
+    // Standardize successful responses
+    const standardizedResponse = {
+      ...response,
+      data: {
+        success: true,
+        ...response.data,
+        // Ensure user object maintains all fields
+        ...(response.data.user && {
+          user: {
+            ...response.data.user,
+            // Explicitly preserve location fields
+            governorate: response.data.user.governorate,
+            district: response.data.user.district,
+            // Include all other fields
+            ...response.data.user
+          }
+        })
+      }
+    };
+    return standardizedResponse;
   },
   (error) => {
+    // Handle token expiration
     const originalRequest = error.config;
-    
-    // Handle token expiration (401)
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       localStorage.removeItem("token");
       window.location.href = "/login";
     }
 
-    // Format consistent error response
+    // Standardize error responses
     const formattedError = {
-      message: error.response?.data?.message || error.message || "Request failed",
-      code: error.response?.status || error.code || "UNKNOWN_ERROR",
+      message: error.response?.data?.message || 
+               error.message || 
+               "Request failed",
+      code: error.response?.status || 
+            error.code || 
+            "UNKNOWN_ERROR",
       data: error.response?.data,
       originalError: error
     };
 
-    console.error("API Error:", formattedError);
     return Promise.reject(formattedError);
   }
 );
 
-// Helper function to create API endpoints
+// Enhanced endpoint creator
 const createEndpoint = (method, endpoint, defaultError) => {
   return async (data = null, params = null) => {
     try {
-      const response = await axiosInstance({
+      const config = {
         method,
-        url: endpoint,
-        data,
-        params
-      });
+        url: endpoint
+      };
+
+      // Handle GET vs other methods
+      if (method.toLowerCase() === 'get') {
+        config.params = params || data;
+      } else {
+        config.data = data;
+      }
+
+      const response = await axiosInstance(config);
+      
+      // Ensure complete user data is returned
+      if (response.data?.user) {
+        return {
+          ...response.data,
+          user: {
+            ...response.data.user,
+            // Double-check preservation of critical fields
+            governorate: response.data.user.governorate,
+            district: response.data.user.district,
+            role: response.data.user.role,
+            ...response.data.user
+          }
+        };
+      }
+      
       return response.data;
     } catch (error) {
-      const errorMessage = error.message || defaultError;
       console.error(`API ${method.toUpperCase()} ${endpoint} failed:`, error);
-      throw { 
+      throw {
         ...error,
-        message: errorMessage,
+        message: error.message || defaultError,
         endpoint,
         method
       };
@@ -93,7 +125,7 @@ const createEndpoint = (method, endpoint, defaultError) => {
   };
 };
 
-// Auth API Endpoints
+// API Endpoints
 export const authAPI = {
   login: createEndpoint('post', '/auth/login', 'Login failed'),
   register: createEndpoint('post', '/auth/register', 'Registration failed'),
@@ -102,7 +134,6 @@ export const authAPI = {
   refreshToken: createEndpoint('post', '/auth/refresh', 'Token refresh failed')
 };
 
-// Users API Endpoints
 export const usersAPI = {
   getProfile: createEndpoint('get', '/users/profile', 'Failed to fetch profile'),
   getSpecialists: createEndpoint('get', '/users/specialists', 'Failed to fetch specialists'),
@@ -112,7 +143,6 @@ export const usersAPI = {
   updateAvailability: createEndpoint('put', '/users/availability', 'Failed to update availability')
 };
 
-// Messages API Endpoints
 export const messagesAPI = {
   getConversations: createEndpoint('get', '/messages/conversations', 'Failed to fetch conversations'),
   getMessages: createEndpoint('get', '/messages/conversation/:id', 'Failed to fetch messages'),
@@ -121,7 +151,6 @@ export const messagesAPI = {
   markAsRead: createEndpoint('patch', '/messages/:id/read', 'Failed to mark as read')
 };
 
-// Managed API Endpoints
 export const managedAPI = {
   addClient: createEndpoint('post', '/managed/clients', 'Failed to add client'),
   removeClient: createEndpoint('delete', '/managed/clients/:id', 'Failed to remove client'),
@@ -134,14 +163,27 @@ export const managedAPI = {
   getStatistics: createEndpoint('get', '/managed/statistics', 'Failed to fetch statistics')
 };
 
-// Export the axios instance directly
-export { axiosInstance };
+// Debug utility (remove in production)
+export const debugAPI = {
+  printUserData: () => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      console.log("Current token:", token);
+      axiosInstance.get('/auth/verify')
+        .then(res => console.log("Current user data:", res.data?.user))
+        .catch(err => console.error("Debug error:", err));
+    } else {
+      console.log("No token found");
+    }
+  }
+};
 
-// Default export for backward compatibility
+export { axiosInstance };
 export default {
   axiosInstance,
   authAPI,
   usersAPI,
   messagesAPI,
-  managedAPI
+  managedAPI,
+  debugAPI
 };

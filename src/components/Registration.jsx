@@ -1,48 +1,78 @@
 "use client"
 
-import { useState } from "react"
-import { Link, useLocation, useNavigate } from "react-router-dom"
-import { useAuth } from "../contexts/AuthContext"
-import { governorates, districtByGovernorate, specialties } from "../constants/data"
+import { useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
+import { governorates, districtByGovernorate } from "../constants/data";
 
 const Registration = () => {
-  const location = useLocation()
-  const navigate = useNavigate()
-  const { register, loading, error } = useAuth()
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { register, loading, error } = useAuth();
 
+  const role = location.state?.role || "";
+  
   const [formData, setFormData] = useState({
     fullname: "",
     password: "",
-    role: location.state?.role || "",
     governorate: "",
-    district: "",
-    neededSpecialists: specialties.map((spec) => ({ name: spec, isNeeded: false })),
-  })
+    district: ""
+  });
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
+  e.preventDefault();
 
-    if (formData.role === "specialist") {
-      navigate("/specialist-setup", { state: { userData: formData } })
-    } else {
-      try {
-        await register(formData)
-      } catch (error) {
-        console.error("Registration failed:", error)
-      }
+  if (formData.role === "specialist") {
+    navigate("/specialist-setup", { 
+      state: { 
+        userData: {
+          fullname: formData.fullname,
+          password: formData.password,
+          role: "specialist",
+          governorate: formData.governorate,
+          district: formData.district,
+          isAvailable: true,
+          specialty: ""
+        }
+      } 
+    });
+  } else {
+    try {
+      // Create PURIFIED client data object
+      const clientData = {
+        fullname: formData.fullname,
+        password: formData.password,
+        role: "client",
+        governorate: formData.governorate,
+        district: formData.district,
+        neededSpecialists: [],
+        // Explicitly set specialist fields to undefined
+        isAvailable: undefined,
+        specialty: undefined
+      };
+      
+      // Stringify and parse to remove undefined values
+      const cleanedData = JSON.parse(JSON.stringify(clientData));
+      
+      await register(cleanedData);
+    } catch (error) {
+      console.error("Registration failed:", error);
     }
   }
+};
 
   const handleChange = (e) => {
-    const { name, value } = e.target
+    const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: value,
       ...(name === "governorate" && { district: "" }),
-    }))
-  }
+    }));
+  };
 
-  const availableDistricts = formData.governorate ? districtByGovernorate[formData.governorate] || [] : []
+  const availableDistricts = formData.governorate 
+    ? districtByGovernorate[formData.governorate] || [] 
+    : [];
 
   return (
     <div className="app-container">
@@ -58,11 +88,15 @@ const Registration = () => {
       <div className="main-content">
         <div className="auth-card">
           <div className="card-header text-center">
-            <h2>📝 Register as {formData.role === "client" ? "Client" : "Specialist"}</h2>
-            <p>Create your {formData.role} account</p>
+            <h2>📝 Register as {role === "client" ? "Client" : "Specialist"}</h2>
+            <p>Create your {role} account</p>
           </div>
           <div className="card-content">
-            {error && <div className="error-message">{error}</div>}
+            {error && (
+              <div className="error-message">
+                {error.message || "Registration failed"}
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="form">
               <div className="form-group">
@@ -126,7 +160,9 @@ const Registration = () => {
                   disabled={!formData.governorate || loading}
                   required
                 >
-                  <option value="">{formData.governorate ? "Select your district" : "Select governorate first"}</option>
+                  <option value="">
+                    {formData.governorate ? "Select your district" : "Select governorate first"}
+                  </option>
                   {availableDistricts.map((district) => (
                     <option key={district} value={district}>
                       {district}
@@ -135,14 +171,18 @@ const Registration = () => {
                 </select>
               </div>
 
-              <button type="submit" className="btn btn-primary full-width" disabled={loading}>
+              <button
+                type="submit"
+                className="btn btn-primary full-width"
+                disabled={loading}
+              >
                 {loading ? (
                   <div className="loading-spinner">
                     <div className="spinner"></div>
                     Loading...
                   </div>
                 ) : (
-                  "Next"
+                  role === "specialist" ? "Continue Setup" : "Register"
                 )}
               </button>
             </form>
@@ -150,7 +190,7 @@ const Registration = () => {
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default Registration
+export default Registration;
