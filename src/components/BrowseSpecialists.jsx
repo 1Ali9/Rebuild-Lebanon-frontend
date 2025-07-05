@@ -1,69 +1,83 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Link, useNavigate } from "react-router-dom"
-import { useAuth } from "../contexts/AuthContext"
-import { useData } from "../contexts/DataContext"
-import { usersAPI, managedAPI } from "../services/api"
-import { governorates, districtByGovernorate, specialties } from "../constants/data"
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
+import { useData } from "../contexts/DataContext";
+import { usersAPI, managedAPI } from "../services/api";
+import {
+  governorates,
+  districtByGovernorate,
+  specialties,
+} from "../constants/data";
 
 const BrowseSpecialists = () => {
-  const { user } = useAuth()
-  const { managedSpecialists, setManagedSpecialists } = useData()
-  const navigate = useNavigate()
+  const { user } = useAuth();
+  const { managedSpecialists, setManagedSpecialists } = useData();
+  const navigate = useNavigate();
 
-  const [specialists, setSpecialists] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
+  const [specialists, setSpecialists] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [filters, setFilters] = useState({
     governorate: "",
     district: "",
     specialty: "",
     availableOnly: false,
-  })
+  });
 
   useEffect(() => {
-    fetchSpecialists()
-  }, [filters])
+    fetchSpecialists();
+  }, [filters]);
 
   const fetchSpecialists = async () => {
-  try {
-    setLoading(true);
-    setError("");
-    
-    // Prepare query params from filters
-    const params = {
-      governorate: filters.governorate || undefined,
-      district: filters.district || undefined,
-      specialty: filters.specialty || undefined,
-      isAvailable: filters.availableOnly || undefined
-    };
+    try {
+      setLoading(true);
+      setError("");
 
-    // Clean undefined params
-    Object.keys(params).forEach(key => params[key] === undefined && delete params[key]);
+      // Prepare query params from filters
+      const params = {
+        governorate: filters.governorate || undefined,
+        district: filters.district || undefined,
+        specialty: filters.specialty || undefined,
+        isAvailable: filters.availableOnly || undefined,
+      };
 
-    const response = await usersAPI.getSpecialists(params);
-    
-    // Handle both array response and object with specialists property
-    setSpecialists(Array.isArray(response.data) ? response.data : response.data?.specialists || []);
-  } catch (error) {
-    setError("Failed to fetch specialists");
-    console.error("Error fetching specialists:", error);
-    setSpecialists([]); // Reset specialists on error
-  } finally {
-    setLoading(false);
-  }
-};
+      // Clean undefined params
+      Object.keys(params).forEach(
+        (key) => params[key] === undefined && delete params[key]
+      );
+
+      const response = await usersAPI.getSpecialists(params);
+
+      // Handle both array response and object with specialists property
+      setSpecialists(
+        Object.values(
+          Array.isArray(response.data)
+            ? response.data
+            : response.data?.specialists || response.data || {}
+        )
+      );
+    } catch (error) {
+      setError("Failed to fetch specialists");
+      console.error("Error fetching specialists:", error);
+      setSpecialists([]); // Reset specialists on error
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const addSpecialistToManaged = async (specialist) => {
-    const isAlreadyManaged = managedSpecialists.some((ms) => ms._id === specialist._id)
+    const isAlreadyManaged = managedSpecialists.some(
+      (ms) => ms._id === specialist._id
+    );
     if (isAlreadyManaged) {
-      setError("Specialist is already in your managed list")
-      return
+      setError("Specialist is already in your managed list");
+      return;
     }
 
     try {
-      await managedAPI.addSpecialist(specialist._id)
+      await managedAPI.addSpecialist(specialist._id);
 
       const newManagedSpecialist = {
         _id: specialist._id,
@@ -74,25 +88,27 @@ const BrowseSpecialists = () => {
         isDone: false,
         dateAdded: new Date(),
         isAvailable: specialist.isAvailable,
-      }
+      };
 
-      setManagedSpecialists((prev) => [...prev, newManagedSpecialist])
-      setError("")
+      setManagedSpecialists((prev) => [...prev, newManagedSpecialist]);
+      setError("");
     } catch (error) {
-      setError("Failed to add specialist to managed list")
-      console.error("Error adding specialist:", error)
+      setError("Failed to add specialist to managed list");
+      console.error("Error adding specialist:", error);
     }
-  }
+  };
 
   const updateFilters = (field, value) => {
     setFilters((prev) => ({
       ...prev,
       [field]: value,
       ...(field === "governorate" && { district: "" }),
-    }))
-  }
+    }));
+  };
 
-  const availableDistricts = filters.governorate ? districtByGovernorate[filters.governorate] || [] : []
+  const availableDistricts = filters.governorate
+    ? districtByGovernorate[filters.governorate] || []
+    : [];
 
   return (
     <div className="app-container">
@@ -126,7 +142,9 @@ const BrowseSpecialists = () => {
                     <select
                       className="form-select"
                       value={filters.governorate}
-                      onChange={(e) => updateFilters("governorate", e.target.value)}
+                      onChange={(e) =>
+                        updateFilters("governorate", e.target.value)
+                      }
                     >
                       <option value="">All Governorates</option>
                       {governorates.map((gov) => (
@@ -142,7 +160,9 @@ const BrowseSpecialists = () => {
                     <select
                       className="form-select"
                       value={filters.district}
-                      onChange={(e) => updateFilters("district", e.target.value)}
+                      onChange={(e) =>
+                        updateFilters("district", e.target.value)
+                      }
                       disabled={!filters.governorate}
                     >
                       <option value="">All Districts</option>
@@ -159,7 +179,9 @@ const BrowseSpecialists = () => {
                     <select
                       className="form-select"
                       value={filters.specialty}
-                      onChange={(e) => updateFilters("specialty", e.target.value)}
+                      onChange={(e) =>
+                        updateFilters("specialty", e.target.value)
+                      }
                     >
                       <option value="">All Specialties</option>
                       {specialties.map((spec) => (
@@ -175,7 +197,9 @@ const BrowseSpecialists = () => {
                       <input
                         type="checkbox"
                         checked={filters.availableOnly}
-                        onChange={(e) => updateFilters("availableOnly", e.target.checked)}
+                        onChange={(e) =>
+                          updateFilters("availableOnly", e.target.checked)
+                        }
                       />
                       Available only
                     </label>
@@ -189,7 +213,9 @@ const BrowseSpecialists = () => {
               <h3 className="mb-4">
                 {loading
                   ? "Loading..."
-                  : `Found ${specialists.length} specialist${specialists.length !== 1 ? "s" : ""}`}
+                  : `Found ${specialists.length} specialist${
+                      specialists.length !== 1 ? "s" : ""
+                    }`}
               </h3>
 
               {loading ? (
@@ -206,29 +232,44 @@ const BrowseSpecialists = () => {
                       <div className="dashboard-item-header">
                         <div className="flex justify-between items-start">
                           <h4>{specialist.fullname}</h4>
-                          <span className={`badge ${specialist.isAvailable ? "badge-available" : "badge-unavailable"}`}>
-                            {specialist.isAvailable ? "Available" : "Unavailable"}
+                          <span
+                            className={`badge ${
+                              specialist.isAvailable
+                                ? "badge-available"
+                                : "badge-unavailable"
+                            }`}
+                          >
+                            {specialist.isAvailable
+                              ? "Available"
+                              : "Unavailable"}
                           </span>
                         </div>
                         <p>{specialist.specialty}</p>
                       </div>
                       <div className="dashboard-item-content">
                         <p className="mb-4">
-                          <strong>Location:</strong> {specialist.district}, {specialist.governorate}
+                          <strong>Location:</strong> {specialist.district},{" "}
+                          {specialist.governorate}
                         </p>
                         <div className="flex gap-2">
                           <button
                             className="btn btn-primary flex-1"
-                            onClick={() => navigate(`/chat/${specialist.fullname}`)}
+                            onClick={() =>
+                              navigate(`/chat/${specialist.fullname}`)
+                            }
                           >
                             💬 Message
                           </button>
                           <button
                             className="btn btn-black flex-1"
                             onClick={() => addSpecialistToManaged(specialist)}
-                            disabled={managedSpecialists.some((ms) => ms._id === specialist._id)}
+                            disabled={managedSpecialists.some(
+                              (ms) => ms._id === specialist._id
+                            )}
                           >
-                            {managedSpecialists.some((ms) => ms._id === specialist._id)
+                            {managedSpecialists.some(
+                              (ms) => ms._id === specialist._id
+                            )
                               ? "✓ Added"
                               : "+ Add Specialist"}
                           </button>
@@ -251,7 +292,7 @@ const BrowseSpecialists = () => {
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default BrowseSpecialists
+export default BrowseSpecialists;
