@@ -79,21 +79,34 @@ axiosInstance.interceptors.response.use(
   }
 );
 
+// Helper function to properly prepare request data
+const prepareRequestData = (method, data) => {
+  if (method.toLowerCase() === 'get') {
+    return { params: data };
+  }
+
+  // Ensure boolean fields are properly handled
+  if (data && typeof data === 'object') {
+    return {
+      data: {
+        ...data,
+        isAvailable: data.isAvailable !== undefined ? Boolean(data.isAvailable) : true
+      }
+    };
+  }
+
+  return { data };
+};
+
 // Enhanced endpoint creator
 const createEndpoint = (method, endpoint, defaultError) => {
   return async (data = null, params = null) => {
     try {
       const config = {
         method,
-        url: endpoint
+        url: endpoint,
+        ...prepareRequestData(method, data || params)
       };
-
-      // Handle GET vs other methods
-      if (method.toLowerCase() === 'get') {
-        config.params = params || data;
-      } else {
-        config.data = data;
-      }
 
       const response = await axiosInstance(config);
       
@@ -115,6 +128,16 @@ const createEndpoint = (method, endpoint, defaultError) => {
       return response.data;
     } catch (error) {
       console.error(`API ${method.toUpperCase()} ${endpoint} failed:`, error);
+      
+      // Enhanced error handling for validation errors
+      if (error.code === 400 && error.data?.errors) {
+        const validationErrors = Object.entries(error.data.errors)
+          .map(([field, { message }]) => `${field}: ${message}`)
+          .join(', ');
+        
+        error.message = `Validation failed: ${validationErrors}`;
+      }
+
       throw {
         ...error,
         message: error.message || defaultError,
@@ -134,6 +157,7 @@ export const authAPI = {
   refreshToken: createEndpoint('post', '/auth/refresh', 'Token refresh failed')
 };
 
+// ... rest of your API endpoints remain the same ...
 export const usersAPI = {
   getProfile: createEndpoint('get', '/users/profile', 'Failed to fetch profile'),
   getSpecialists: createEndpoint('get', '/users/specialists', 'Failed to fetch specialists'),
@@ -163,7 +187,6 @@ export const managedAPI = {
   getStatistics: createEndpoint('get', '/managed/statistics', 'Failed to fetch statistics')
 };
 
-// Debug utility (remove in production)
 export const debugAPI = {
   printUserData: () => {
     const token = localStorage.getItem("token");

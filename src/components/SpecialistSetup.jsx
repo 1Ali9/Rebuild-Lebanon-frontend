@@ -1,33 +1,66 @@
 "use client"
 
-import { useState } from "react"
-import { useLocation, useNavigate } from "react-router-dom"
-import { useAuth } from "../contexts/AuthContext"
-import { specialties } from "../constants/data"
+import { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
+import { specialties } from "../constants/data";
 
 const SpecialistSetup = () => {
-  const location = useLocation()
-  const navigate = useNavigate()
-  const { register, loading, error } = useAuth()
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { register, loading, error, setError } = useAuth();
 
-  const userData = location.state?.userData || {}
-  const [specialty, setSpecialty] = useState("")
+  // Get initial data from registration
+  const userData = location.state?.userData || {};
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    specialty: "",
+    isAvailable: true
+  });
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
+    e.preventDefault();
+    setError("");
 
-    const completeUserData = {
-      ...userData,
-      specialty,
-      isAvailable: true,
+    if (!formData.specialty) {
+      setError("Please select your specialty");
+      return;
     }
 
     try {
-      await register(completeUserData)
-    } catch (error) {
-      console.error("Specialist registration failed:", error)
+      // Prepare complete registration data
+      const registrationData = {
+        ...userData,  // Contains: fullname, password, governorate, district
+        role: "specialist",
+        specialty: formData.specialty,
+        isAvailable: Boolean(formData.isAvailable),
+        neededSpecialists: undefined  // Explicitly undefined for specialists
+      };
+
+      await register(registrationData);
+    } catch (err) {
+      console.error("Registration error:", err);
+      
+      // Handle validation errors
+      if (err.code === 400 && err.data?.errors) {
+        const errorMessages = Object.values(err.data.errors)
+          .map(error => error.message)
+          .join(". ");
+        setError(errorMessages);
+      } else {
+        setError(err.message || "Registration failed. Please try again.");
+      }
     }
-  }
+  };
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value
+    }));
+  };
 
   return (
     <div className="app-container">
@@ -35,34 +68,43 @@ const SpecialistSetup = () => {
         <div className="auth-card">
           <div className="card-header text-center">
             <h2>🔧 Specialist Setup</h2>
-            <p>Select your specialty to complete registration</p>
+            <p>Complete your specialist profile</p>
           </div>
+          
           <div className="card-content">
-            {error && <div className="error-message">{error}</div>}
+            {error && (
+              <div className="error-message mb-4">
+                {typeof error === 'string' ? error : JSON.stringify(error)}
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="form">
+              {/* User Info Section */}
               <div className="form-group">
-                <label>Welcome, {userData.fullname}! 👋</label>
-                <div className="user-info">
-                  <p>
-                    <strong>Governorate:</strong> {userData.governorate}
-                  </p>
-                  <p>
-                    <strong>District:</strong> {userData.district}
-                  </p>
-                  <p>
-                    <strong>Role:</strong> Specialist
-                  </p>
+                <label className="text-lg font-medium">Welcome, {userData.fullname || 'Specialist'}! 👋</label>
+                <div className="user-details-grid mt-2">
+                  <div className="detail-item">
+                    <strong>Governorate:</strong>
+                    <p>{userData.governorate || 'Not specified'}</p>
+                  </div>
+                  <div className="detail-item">
+                    <strong>District:</strong>
+                    <p>{userData.district || 'Not specified'}</p>
+                  </div>
                 </div>
               </div>
 
+              {/* Specialty Selection */}
               <div className="form-group">
-                <label htmlFor="specialty">Your Specialty</label>
+                <label htmlFor="specialty" className="required">
+                  Your Specialty
+                </label>
                 <select
                   id="specialty"
+                  name="specialty"
                   className="form-select"
-                  value={specialty}
-                  onChange={(e) => setSpecialty(e.target.value)}
+                  value={formData.specialty}
+                  onChange={handleChange}
                   disabled={loading}
                   required
                 >
@@ -75,21 +117,42 @@ const SpecialistSetup = () => {
                 </select>
               </div>
 
+              {/* Availability Toggle */}
+              <div className="form-group">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    name="isAvailable"
+                    checked={formData.isAvailable}
+                    onChange={handleChange}
+                    disabled={loading}
+                    className="checkbox-input"
+                  />
+                  <span className="checkbox-custom"></span>
+                  Available for immediate work
+                </label>
+              </div>
+
+              {/* Form Actions */}
               <div className="form-actions">
                 <button
                   type="button"
                   className="btn btn-nav"
-                  onClick={() => navigate("/registration")}
+                  onClick={() => navigate(-1)}
                   disabled={loading}
                 >
                   Back
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={loading}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={loading || !formData.specialty}
+                >
                   {loading ? (
-                    <div className="loading-spinner">
-                      <div className="spinner"></div>
-                      Loading...
-                    </div>
+                    <>
+                      <span className="spinner"></span>
+                      Processing...
+                    </>
                   ) : (
                     "Complete Registration"
                   )}
@@ -100,7 +163,7 @@ const SpecialistSetup = () => {
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default SpecialistSetup
+export default SpecialistSetup;

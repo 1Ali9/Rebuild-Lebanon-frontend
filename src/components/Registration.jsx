@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { governorates, districtByGovernorate } from "../constants/data";
@@ -16,63 +16,83 @@ const Registration = () => {
     fullname: "",
     password: "",
     governorate: "",
-    district: ""
+    district: "",
+    role: role // Include role in form state
   });
 
-  const handleSubmit = async (e) => {
-  e.preventDefault();
+  // Verify valid role on component mount
+  useEffect(() => {
+    if (!["client", "specialist"].includes(role)) {
+      navigate("/", { replace: true });
+    }
+  }, [role, navigate]);
 
-  if (formData.role === "specialist") {
-    navigate("/specialist-setup", { 
-      state: { 
-        userData: {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    // Validate all required fields are filled
+    if (!formData.fullname || !formData.password || 
+        !formData.governorate || !formData.district) {
+      return;
+    }
+
+    if (role === "specialist") {
+      // Redirect to specialist setup with collected data
+      navigate("/specialist-setup", { 
+        state: { 
+          userData: {
+            fullname: formData.fullname,
+            password: formData.password,
+            role: "specialist",
+            governorate: formData.governorate,
+            district: formData.district,
+            isAvailable: true, // Default for new specialists
+            specialty: "" // To be completed in setup
+          }
+        } 
+      });
+    } else {
+      try {
+        // Client registration data
+        const clientData = {
           fullname: formData.fullname,
           password: formData.password,
-          role: "specialist",
+          role: "client",
           governorate: formData.governorate,
           district: formData.district,
-          isAvailable: true,
-          specialty: ""
-        }
-      } 
-    });
-  } else {
-    try {
-      // Create PURIFIED client data object
-      const clientData = {
-        fullname: formData.fullname,
-        password: formData.password,
-        role: "client",
-        governorate: formData.governorate,
-        district: formData.district,
-        neededSpecialists: [],
-        // Explicitly set specialist fields to undefined
-        isAvailable: undefined,
-        specialty: undefined
-      };
-      
-      // Stringify and parse to remove undefined values
-      const cleanedData = JSON.parse(JSON.stringify(clientData));
-      
-      await register(cleanedData);
-    } catch (error) {
-      console.error("Registration failed:", error);
+          neededSpecialists: [], // Default empty array
+          isAvailable: undefined, // Explicitly undefined
+          specialty: undefined // Explicitly undefined
+        };
+        
+        // Clean data by removing undefined values
+        const cleanedData = JSON.parse(JSON.stringify(clientData));
+        
+        await register(cleanedData);
+      } catch (error) {
+        console.error("Registration failed:", error);
+      }
     }
-  }
-};
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: value,
-      ...(name === "governorate" && { district: "" }),
+      ...(name === "governorate" && { district: "" }), // Reset district when governorate changes
     }));
   };
 
   const availableDistricts = formData.governorate 
     ? districtByGovernorate[formData.governorate] || [] 
     : [];
+
+  // Check if form can be submitted
+  const canSubmit = formData.fullname && 
+                   formData.password && 
+                   formData.governorate && 
+                   formData.district;
 
   return (
     <div className="app-container">
@@ -174,7 +194,7 @@ const Registration = () => {
               <button
                 type="submit"
                 className="btn btn-primary full-width"
-                disabled={loading}
+                disabled={loading || !canSubmit}
               >
                 {loading ? (
                   <div className="loading-spinner">
