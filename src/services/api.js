@@ -2,91 +2,122 @@ import axios from "axios";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3500/api";
 
-// Create axios instance with default configuration
+// Create axios instance with enhanced configuration
 const axiosInstance = axios.create({
   baseURL: API_URL,
   headers: {
     "Content-Type": "application/json",
-    "Accept": "application/json"
+    "Accept": "application/json",
+    "X-Requested-With": "XMLHttpRequest"
   },
   timeout: 10000,
-  withCredentials: true
+  withCredentials: true,
+  xsrfCookieName: "XSRF-TOKEN",
+  xsrfHeaderName: "X-XSRF-TOKEN"
 });
 
-// Request interceptor for adding auth token
+// Enhanced request interceptor
 axiosInstance.interceptors.request.use(
   (config) => {
-    if (!config.url?.includes('/auth')) {
+    // Add auth token for non-auth endpoints
+    if (!config.url?.includes("/auth")) {
       const token = localStorage.getItem("token");
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
     }
+
+    // Special handling for PUT/POST requests
+    if (["put", "post"].includes(config.method?.toLowerCase())) {
+      config.headers["Content-Type"] = config.headers["Content-Type"] || "application/json";
+    }
+
     return config;
   },
   (error) => {
     console.error("Request error:", error);
-    return Promise.reject(error);
+    return Promise.reject({
+      ...error,
+      isNetworkError: true,
+      message: "Request configuration failed"
+    });
   }
 );
 
-// Enhanced response interceptor
+// Enhanced response interceptor with CORS/network error handling
 axiosInstance.interceptors.response.use(
   (response) => {
     // Standardize successful responses
-    const standardizedResponse = {
+    return {
       ...response,
       data: {
         success: true,
         ...response.data,
-        // Ensure user object maintains all fields
-        ...(response.data.user && {
-          user: {
-            ...response.data.user,
-            // Explicitly preserve location fields
-            governorate: response.data.user.governorate,
-            district: response.data.user.district,
-            // Include all other fields
-            ...response.data.user
-          }
-        })
+        user: response.data?.user 
+          ? {
+              ...response.data.user,
+              governorate: response.data.user.governorate,
+              district: response.data.user.district,
+              role: response.data.user.role
+            }
+          : undefined
       }
     };
-    return standardizedResponse;
   },
   (error) => {
-    // Handle token expiration
-    const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      localStorage.removeItem("token");
-      window.location.href = "/login";
+    // Handle network/CORS errors specifically
+    if (error.code === "ERR_NETWORK" || error.message.includes("Failed to fetch")) {
+      return Promise.reject({
+        ...error,
+        isNetworkError: true,
+        message: "Network error. Please check your connection.",
+        shouldRetry: true
+      });
+    }
+
+    // Handle 401 unauthorized
+    if (error.response?.status === 401) {
+      const originalRequest = error.config;
+      if (!originalRequest._retry) {
+        originalRequest._retry = true;
+        localStorage.removeItem("token");
+        window.location.href = "/login";
+      }
     }
 
     // Standardize error responses
     const formattedError = {
       message: error.response?.data?.message || 
-               error.message || 
-               "Request failed",
+              error.message || 
+              "Request failed",
       code: error.response?.status || 
             error.code || 
             "UNKNOWN_ERROR",
       data: error.response?.data,
-      originalError: error
+      originalError: error,
+      isNetworkError: error.isNetworkError || false
     };
+
+    // Enhanced validation error handling
+    if (error.response?.status === 400 && error.response.data?.errors) {
+      formattedError.validationErrors = Object.entries(error.response.data.errors)
+        .map(([field, err]) => `${field}: ${err.message}`)
+        .join(", ");
+      formattedError.message = "Validation failed";
+    }
 
     return Promise.reject(formattedError);
   }
 );
 
-// Helper function to properly prepare request data
+// Enhanced request data preparation
 const prepareRequestData = (method, data) => {
-  if (method.toLowerCase() === 'get') {
+  if (method.toLowerCase() === "get") {
     return { params: data };
   }
 
-  // Ensure boolean fields are properly handled
-  if (data && typeof data === 'object') {
+  // Convert boolean fields properly
+  if (data && typeof data === "object") {
     return {
       data: {
         ...data,
@@ -98,9 +129,9 @@ const prepareRequestData = (method, data) => {
   return { data };
 };
 
-// Enhanced endpoint creator
+// Enhanced endpoint creator with retry logic
 const createEndpoint = (method, endpoint, defaultError) => {
-  return async (data = null, params = null) => {
+  return async (data = null, params = null, retries = 1) => {
     try {
       const config = {
         method,
@@ -110,98 +141,108 @@ const createEndpoint = (method, endpoint, defaultError) => {
 
       const response = await axiosInstance(config);
       
-      // Ensure complete user data is returned
+      // Ensure consistent user data structure
       if (response.data?.user) {
-        return {
-          ...response.data,
-          user: {
-            ...response.data.user,
-            // Double-check preservation of critical fields
-            governorate: response.data.user.governorate,
-            district: response.data.user.district,
-            role: response.data.user.role,
-            ...response.data.user
-          }
+        response.data.user = {
+          ...response.data.user,
+          governorate: response.data.user.governorate,
+          district: response.data.user.district,
+          role: response.data.user.role
         };
       }
       
       return response.data;
     } catch (error) {
       console.error(`API ${method.toUpperCase()} ${endpoint} failed:`, error);
-      
-      // Enhanced error handling for validation errors
-      if (error.code === 400 && error.data?.errors) {
-        const validationErrors = Object.entries(error.data.errors)
-          .map(([field, { message }]) => `${field}: ${message}`)
-          .join(', ');
-        
-        error.message = `Validation failed: ${validationErrors}`;
+
+      // Special handling for network errors with retry
+      if (error.shouldRetry && retries > 0) {
+        console.log(`Retrying ${endpoint}... (${retries} attempts left)`);
+        return createEndpoint(method, endpoint, defaultError)(data, params, retries - 1);
       }
 
       throw {
         ...error,
-        message: error.message || defaultError,
         endpoint,
-        method
+        method,
+        message: error.message || defaultError,
+        timestamp: new Date().toISOString()
       };
     }
   };
 };
 
-// API Endpoints
+// API Endpoints with enhanced configuration
 export const authAPI = {
-  login: createEndpoint('post', '/auth/login', 'Login failed'),
-  register: createEndpoint('post', '/auth/register', 'Registration failed'),
-  logout: createEndpoint('post', '/auth/logout', 'Logout failed'),
-  verifyToken: createEndpoint('get', '/auth/verify', 'Token verification failed'),
-  refreshToken: createEndpoint('post', '/auth/refresh', 'Token refresh failed')
+  login: createEndpoint("post", "/auth/login", "Login failed"),
+  register: createEndpoint("post", "/auth/register", "Registration failed"),
+  logout: createEndpoint("post", "/auth/logout", "Logout failed"),
+  verifyToken: createEndpoint("get", "/auth/verify", "Token verification failed"),
+  refreshToken: createEndpoint("post", "/auth/refresh", "Token refresh failed")
 };
 
-// ... rest of your API endpoints remain the same ...
 export const usersAPI = {
-  getProfile: createEndpoint('get', '/users/profile', 'Failed to fetch profile'),
-  getSpecialists: createEndpoint('get', '/users/specialists', 'Failed to fetch specialists'),
-  getClients: createEndpoint('get', '/users/clients', 'Failed to fetch clients'),
-  updateProfile: createEndpoint('put', '/users/profile', 'Failed to update profile'),
-  updateNeededSpecialists: createEndpoint('put', '/users/needed-specialists', 'Failed to update specialists'),
-  updateAvailability: createEndpoint('put', '/users/availability', 'Failed to update availability')
+  getProfile: createEndpoint("get", "/users/profile", "Failed to fetch profile"),
+  getSpecialists: createEndpoint("get", "/users/specialists", "Failed to fetch specialists"),
+  getClients: createEndpoint("get", "/users/clients", "Failed to fetch clients"),
+  updateProfile: createEndpoint("put", "/users/profile", "Failed to update profile"),
+  updateNeededSpecialists: createEndpoint("put", "/users/needed-specialists", "Failed to update specialists"),
+  updateAvailability: createEndpoint("put", "/users/availability", "Failed to update availability", {
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded"
+    }
+  })
 };
 
 export const messagesAPI = {
-  getConversations: createEndpoint('get', '/messages/conversations', 'Failed to fetch conversations'),
-  getMessages: createEndpoint('get', '/messages/conversation/:id', 'Failed to fetch messages'),
-  sendMessage: createEndpoint('post', '/messages', 'Failed to send message'),
-  createConversation: createEndpoint('post', '/messages/conversations', 'Failed to create conversation'),
-  markAsRead: createEndpoint('patch', '/messages/:id/read', 'Failed to mark as read')
+  getConversations: createEndpoint("get", "/messages/conversations", "Failed to fetch conversations"),
+  getMessages: createEndpoint("get", "/messages/conversation/:id", "Failed to fetch messages"),
+  sendMessage: createEndpoint("post", "/messages", "Failed to send message"),
+  createConversation: createEndpoint("post", "/messages/conversations", "Failed to create conversation"),
+  markAsRead: createEndpoint("patch", "/messages/:id/read", "Failed to mark as read")
 };
 
 export const managedAPI = {
-  addClient: createEndpoint('post', '/managed/clients', 'Failed to add client'),
-  removeClient: createEndpoint('delete', '/managed/clients/:id', 'Failed to remove client'),
-  updateClientStatus: createEndpoint('patch', '/managed/clients/:id/status', 'Failed to update client status'),
-  getManagedClients: createEndpoint('get', '/managed/clients', 'Failed to fetch clients'),
-  addSpecialist: createEndpoint('post', '/managed/specialists', 'Failed to add specialist'),
-  removeSpecialist: createEndpoint('delete', '/managed/specialists/:id', 'Failed to remove specialist'),
-  updateSpecialistStatus: createEndpoint('patch', '/managed/specialists/:id/status', 'Failed to update specialist status'),
-  getManagedSpecialists: createEndpoint('get', '/managed/specialists', 'Failed to fetch specialists'),
-  getStatistics: createEndpoint('get', '/managed/statistics', 'Failed to fetch statistics')
+  addClient: createEndpoint("post", "/managed/clients", "Failed to add client"),
+  removeClient: createEndpoint("delete", "/managed/clients/:id", "Failed to remove client"),
+  updateClientStatus: createEndpoint("patch", "/managed/clients/:id/status", "Failed to update client status"),
+  getManagedClients: createEndpoint("get", "/managed/clients", "Failed to fetch clients"),
+  addSpecialist: createEndpoint("post", "/managed/specialists", "Failed to add specialist"),
+  removeSpecialist: createEndpoint("delete", "/managed/specialists/:id", "Failed to remove specialist"),
+  updateSpecialistStatus: createEndpoint("patch", "/managed/specialists/:id/status", "Failed to update specialist status"),
+  getManagedSpecialists: createEndpoint("get", "/managed/specialists", "Failed to fetch specialists"),
+  getStatistics: createEndpoint("get", "/managed/statistics", "Failed to fetch statistics")
 };
 
+// Enhanced debug utilities
 export const debugAPI = {
   printUserData: () => {
     const token = localStorage.getItem("token");
     if (token) {
+      console.group("User Debug Info");
       console.log("Current token:", token);
-      axiosInstance.get('/auth/verify')
-        .then(res => console.log("Current user data:", res.data?.user))
-        .catch(err => console.error("Debug error:", err));
+      axiosInstance.get("/auth/verify")
+        .then(res => {
+          console.log("User data:", res.data?.user);
+          console.groupEnd();
+        })
+        .catch(err => {
+          console.error("Debug error:", err);
+          console.groupEnd();
+        });
     } else {
-      console.log("No token found");
+      console.log("No token found in localStorage");
     }
+  },
+  pingServer: () => {
+    return axiosInstance.get("/health")
+      .then(res => console.log("Server health:", res.data))
+      .catch(err => console.error("Server ping failed:", err));
   }
 };
 
 export { axiosInstance };
+
 export default {
   axiosInstance,
   authAPI,

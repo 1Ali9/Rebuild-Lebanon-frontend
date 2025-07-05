@@ -17,14 +17,45 @@ const SpecialistDashboard = () => {
   }
 
   const toggleAvailability = async () => {
-    try {
-      const newAvailability = !user.isAvailable
-      await usersAPI.updateAvailability(newAvailability)
-      updateUser({ ...user, isAvailable: newAvailability })
-    } catch (error) {
-      console.error("Failed to update availability:", error)
+  try {
+    const newAvailability = !user.isAvailable;
+    
+    // Explicitly structure the request data
+    const response = await usersAPI.updateAvailability({ 
+      isAvailable: newAvailability 
+    });
+    
+    if (response.success) {
+      updateUser({ ...user, isAvailable: newAvailability });
+    } else {
+      console.error("Update failed:", response.message);
+      alert(`Update failed: ${response.message}`);
+    }
+  } catch (error) {
+    console.error("Failed to update availability:", error);
+    
+    // Special handling for network errors
+    if (error.isNetworkError) {
+      // Try the request again with different content type
+      try {
+        const retryResponse = await axiosInstance.put(
+          '/users/availability',
+          { isAvailable: !user.isAvailable },
+          {
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded'
+            }
+          }
+        );
+        updateUser({ ...user, isAvailable: !user.isAvailable });
+      } catch (retryError) {
+        alert('Network issue persists. Please refresh and try again.');
+      }
+    } else {
+      alert(`Error: ${error.message || 'Unknown error'}`);
     }
   }
+};
 
   return (
     <div className="app-container">
