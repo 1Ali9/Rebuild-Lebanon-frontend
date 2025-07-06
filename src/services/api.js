@@ -186,7 +186,14 @@ export const usersAPI = {
   getSpecialists: createEndpoint("get", "/users/specialists", "Failed to fetch specialists"),
   getClients: createEndpoint("get", "/users/clients", "Failed to fetch clients"),
   updateProfile: createEndpoint("put", "/users/profile", "Failed to update profile"),
-  updateNeededSpecialists: createEndpoint("put", "/users/needed-specialists", "Failed to update specialists"),
+  updateNeededSpecialists: createEndpoint(
+  "patch", 
+  "/users/needed-specialists", 
+  "Failed to update specialists",
+  {
+    dataTransformer: (data) => ({ neededSpecialists: data })
+  }
+),
   updateAvailability: createEndpoint("put", "/users/availability", "Failed to update availability", {
     headers: {
       "Content-Type": "application/x-www-form-urlencoded"
