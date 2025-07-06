@@ -31,41 +31,36 @@ const BrowseSpecialists = () => {
   }, [filters]);
 
   const fetchSpecialists = async () => {
-    try {
-      setLoading(true);
-      setError("");
+  try {
+    setLoading(true);
+    setError("");
 
-      // Prepare query params from filters
-      const params = {
-        governorate: filters.governorate || undefined,
-        district: filters.district || undefined,
-        specialty: filters.specialty || undefined,
-        isAvailable: filters.availableOnly || undefined,
-      };
+    // Prepare query params from filters
+    const params = {
+      governorate: filters.governorate || undefined,
+      district: filters.district || undefined,
+      specialty: filters.specialty || undefined,
+      isAvailable: filters.availableOnly || undefined,
+    };
 
-      // Clean undefined params
-      Object.keys(params).forEach(
-        (key) => params[key] === undefined && delete params[key]
-      );
+    // Clean undefined params
+    Object.keys(params).forEach(
+      (key) => params[key] === undefined && delete params[key]
+    );
 
-      const response = await usersAPI.getSpecialists(params);
+    const response = await usersAPI.getSpecialists(params);
 
-      // Handle both array response and object with specialists property
-      setSpecialists(
-        Object.values(
-          Array.isArray(response.data)
-            ? response.data
-            : response.data?.specialists || response.data || {}
-        )
-      );
-    } catch (error) {
-      setError("Failed to fetch specialists");
-      console.error("Error fetching specialists:", error);
-      setSpecialists([]); // Reset specialists on error
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Handle the standardized response format
+    setSpecialists(response.data?.specialists || []);
+
+  } catch (error) {
+    setError(error.message || "Failed to fetch specialists");
+    console.error("Error fetching specialists:", error);
+    setSpecialists([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const addSpecialistToManaged = async (specialist) => {
     const isAlreadyManaged = managedSpecialists.some(
