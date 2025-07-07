@@ -111,12 +111,18 @@ axiosInstance.interceptors.response.use(
 );
 
 // Enhanced request data preparation
-const prepareRequestData = (method, data) => {
+// api.js
+const prepareRequestData = (method, data, endpoint) => {
   if (method.toLowerCase() === "get") {
     return { params: data };
   }
 
-  // Convert boolean fields properly
+  // Skip additional wrapping for /users/needed-specialists PATCH
+  if (method.toLowerCase() === "patch" && endpoint === "/users/needed-specialists") {
+    return { data };
+  }
+
+  // Convert boolean fields properly for other requests
   if (data && typeof data === "object") {
     return {
       data: {
@@ -130,18 +136,18 @@ const prepareRequestData = (method, data) => {
 };
 
 // Enhanced endpoint creator with retry logic
-const createEndpoint = (method, endpoint, defaultError) => {
+// api.js
+const createEndpoint = (method, endpoint, defaultError, options = {}) => {
   return async (data = null, params = null, retries = 1) => {
     try {
       const config = {
         method,
         url: endpoint,
-        ...prepareRequestData(method, data || params)
+        ...prepareRequestData(method, options.dataTransformer ? options.dataTransformer(data) : data, endpoint)
       };
 
       const response = await axiosInstance(config);
       
-      // Ensure consistent user data structure
       if (response.data?.user) {
         response.data.user = {
           ...response.data.user,
@@ -155,10 +161,9 @@ const createEndpoint = (method, endpoint, defaultError) => {
     } catch (error) {
       console.error(`API ${method.toUpperCase()} ${endpoint} failed:`, error);
 
-      // Special handling for network errors with retry
       if (error.shouldRetry && retries > 0) {
         console.log(`Retrying ${endpoint}... (${retries} attempts left)`);
-        return createEndpoint(method, endpoint, defaultError)(data, params, retries - 1);
+        return createEndpoint(method, endpoint, defaultError, options)(data, params, retries - 1);
       }
 
       throw {
@@ -186,12 +191,15 @@ export const usersAPI = {
   getSpecialists: createEndpoint("get", "/users/specialists", "Failed to fetch specialists"),
   getClients: createEndpoint("get", "/users/clients", "Failed to fetch clients"),
   updateProfile: createEndpoint("put", "/users/profile", "Failed to update profile"),
-  updateNeededSpecialists: createEndpoint(
-  "patch", 
-  "/users/needed-specialists", 
+  // In api.js
+// api.js
+updateNeededSpecialists: createEndpoint(
+  "patch",
+  "/users/needed-specialists",
   "Failed to update specialists",
   {
-    dataTransformer: (data) => ({ neededSpecialists: data })
+    dataTransformer: data => ({ neededSpecialists: data }),
+    bypassPrepareData: true // Add this to skip prepareRequestData
   }
 ),
   updateAvailability: createEndpoint("put", "/users/availability", "Failed to update availability", {
