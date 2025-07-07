@@ -1,5 +1,6 @@
 import axios from "axios";
 
+
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3500/api";
 
 // Create axios instance with enhanced configuration
@@ -117,12 +118,15 @@ const prepareRequestData = (method, data, endpoint) => {
     return { params: data };
   }
 
-  // Skip additional wrapping for /users/needed-specialists PATCH
+  // For POST /managed/clients, send the data as is (already the ID string)
+  if (method.toLowerCase() === "post" && endpoint === "/managed/clients") {
+    return { data: data }; // Just send the ID directly
+  }
+
   if (method.toLowerCase() === "patch" && endpoint === "/users/needed-specialists") {
     return { data };
   }
 
-  // Convert boolean fields properly for other requests
   if (data && typeof data === "object") {
     return {
       data: {
@@ -218,9 +222,24 @@ export const messagesAPI = {
 };
 
 export const managedAPI = {
-  addClient: createEndpoint("post", "/managed/clients", "Failed to add client"),
+addClient: createEndpoint(
+  "post", 
+  "/managed/clients", 
+  "Failed to add client",
+  {
+    dataTransformer: (data) => ({ clientId: data.clientId || data }) // Handles both formats
+  }
+),
   removeClient: createEndpoint("delete", "/managed/clients/:id", "Failed to remove client"),
-  updateClientStatus: createEndpoint("patch", "/managed/clients/:id/status", "Failed to update client status"),
+  removeClient: createEndpoint("delete", "/managed/clients/:id", "Failed to remove client"),
+  updateClientStatus: createEndpoint(
+    "patch",
+    "/managed/relationships/:relationshipId/status",
+    "Failed to update client status",
+    {
+      dataTransformer: (isDone) => ({ isDone }), // Ensure { isDone } is sent
+    }
+  ),
   getManagedClients: createEndpoint("get", "/managed/clients", "Failed to fetch clients"),
   addSpecialist: createEndpoint("post", "/managed/specialists", "Failed to add specialist"),
   removeSpecialist: createEndpoint("delete", "/managed/specialists/:id", "Failed to remove specialist"),

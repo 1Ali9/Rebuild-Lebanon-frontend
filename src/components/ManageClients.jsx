@@ -26,33 +26,60 @@ const ManageClients = () => {
     fetchManagedClients()
   }, [])
 
-  const fetchManagedClients = async () => {
-    try {
-      setLoading(true)
-      const response = await managedAPI.getManagedClients()
-      setManagedClients(response.data.clients || [])
-    } catch (error) {
-      setError("Failed to fetch managed clients")
-      console.error("Error fetching managed clients:", error)
-    } finally {
-      setLoading(false)
-    }
+const fetchManagedClients = async () => {
+  try {
+    setLoading(true);
+    const response = await managedAPI.getManagedClients();
+    
+    // Handle both response formats for backward compatibility
+    const clientsData = response.clients || response.data?.clients || [];
+    setManagedClients(clientsData);
+    
+  } catch (error) {
+    console.error("Error fetching managed clients:", error);
+    setError(error.message || "Failed to fetch clients");
+    setManagedClients([]); // Reset to empty array on error
+  } finally {
+    setLoading(false);
   }
+};
+// ManageClients.jsx
+const toggleClientDone = async (clientId) => {
+  try {
+    setError("");
 
-  const toggleClientDone = async (clientId) => {
-    try {
-      const client = managedClients.find((c) => c._id === clientId)
-      const newStatus = !client.isDone
-
-      await managedAPI.updateClientStatus(clientId, newStatus)
-
-      setManagedClients((prev) => prev.map((c) => (c._id === clientId ? { ...c, isDone: newStatus } : c)))
-    } catch (error) {
-      setError("Failed to update client status")
-      console.error("Error updating client status:", error)
+    const client = managedClients.find((c) => c._id === clientId);
+    if (!client?.relationshipId) {
+      throw new Error("Missing relationship data for this client");
     }
-  }
 
+    const newStatus = !client.isDone;
+
+    console.log("[FRONTEND] Sending update:", {
+      relationshipId: client.relationshipId,
+      newStatus,
+      clientId,
+    });
+
+    const response = await managedAPI.updateClientStatus(client.relationshipId, newStatus);
+
+    console.log("[FRONTEND] Update response:", response);
+
+    if (!response.success) {
+      throw new Error(response.message || "Update failed");
+    }
+
+    setManagedClients((prev) =>
+      prev.map((c) => (c._id === clientId ? { ...c, isDone: newStatus } : c))
+    );
+  } catch (error) {
+    console.error("[FRONTEND] Update failed:", {
+      error: error.response?.data || error.message,
+      clientId,
+    });
+    setError(error.message || "Failed to update status");
+  }
+};
   const removeClientFromManaged = async (clientId) => {
     try {
       await managedAPI.removeClient(clientId)

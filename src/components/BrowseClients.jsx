@@ -6,6 +6,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useData } from "../contexts/DataContext";
 import { usersAPI, managedAPI } from "../services/api";
 import { governorates, districtByGovernorate } from "../constants/data";
+import mongoose from 'mongoose';
 
 const BrowseClients = () => {
   const { user } = useAuth();
@@ -47,33 +48,62 @@ const BrowseClients = () => {
     }
   };
 
-  const addClientToManaged = async (client) => {
-    const isAlreadyManaged = managedClients.some((mc) => mc._id === client._id);
-    if (isAlreadyManaged) {
+// BrowseClients.jsx
+const addClientToManaged = async (client) => {
+  try {
+    setError("");
+    
+    // Debug log
+    console.log("[DEBUG] Adding client:", {
+      id: client._id,
+      type: typeof client._id,
+      isValid: mongoose.Types.ObjectId.isValid(client._id)
+    });
+
+    // Validation
+    if (!client._id) {
+      throw new Error("Client ID is missing");
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(client._id)) {
+      throw new Error("Invalid client ID format");
+    }
+
+    // Check if already managed
+    if (managedClients.some(mc => mc._id === client._id)) {
       setError("Client is already in your managed list");
       return;
     }
 
-    try {
-      await managedAPI.addClient(client._id);
+    // API call
+    const response = await managedAPI.addClient({
+      clientId: client._id.toString() // Ensure string format
+    });
 
-      const newManagedClient = {
+    // Update local state
+    setManagedClients(prev => [
+      ...prev,
+      {
         _id: client._id,
         fullname: client.fullname,
         governorate: client.governorate,
         district: client.district,
         isDone: false,
         dateAdded: new Date(),
-        neededSpecialists: client.neededSpecialists,
-      };
+        neededSpecialists: client.neededSpecialists
+      }
+    ]);
 
-      setManagedClients((prev) => [...prev, newManagedClient]);
-      setError("");
-    } catch (error) {
-      setError("Failed to add client to managed list");
-      console.error("Error adding client:", error);
+  } catch (error) {
+    console.error("[ERROR] Failed to add client:", error);
+    setError(error.message || "Failed to add client");
+    
+    // Show detailed error if available
+    if (error.response?.data) {
+      console.error("Error details:", error.response.data);
     }
-  };
+  }
+};
 
   const updateFilters = (field, value) => {
     setFilters((prev) => ({
