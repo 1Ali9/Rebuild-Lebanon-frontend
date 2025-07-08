@@ -62,18 +62,21 @@ const BrowseSpecialists = () => {
   }
 };
 
- const addSpecialistToManaged = async (specialist) => {
-  const isAlreadyManaged = managedSpecialists.some(
-    (ms) => ms._id === specialist._id
-  );
-  if (isAlreadyManaged) {
-    setError("Specialist is already in your managed list");
-    return;
-  }
-
+const addSpecialistToManaged = async (specialist) => {
   try {
     setError("");
     console.log("Adding specialist:", specialist._id);
+
+    // Check both local state and API response
+    const isAlreadyManaged = managedSpecialists.some(
+      (ms) => ms._id === specialist._id
+    );
+    
+    if (isAlreadyManaged) {
+      // If local state says already managed, refresh from server
+      await fetchManagedSpecialists(); // Add this function if not exists
+      return;
+    }
 
     const response = await managedAPI.addSpecialist(specialist._id);
 
@@ -81,12 +84,20 @@ const BrowseSpecialists = () => {
       throw new Error(response.message || "Failed to add specialist");
     }
 
-    // Use the specialist data from the response
+    // Update local state with the new specialist
     setManagedSpecialists((prev) => [...prev, response.specialist]);
     setError("");
   } catch (error) {
     console.error("Error adding specialist:", error);
-    setError(error.message || "Failed to add specialist to managed list");
+    
+    // Handle 409 conflict specifically
+    if (error.code === 409) {
+      // Refresh managed specialists list
+      await fetchManagedSpecialists();
+      setError("This specialist was already in your list");
+    } else {
+      setError(error.message || "Failed to add specialist to managed list");
+    }
     
     if (error.response?.data) {
       console.error("Error details:", error.response.data);
@@ -256,19 +267,19 @@ const BrowseSpecialists = () => {
                           >
                             💬 Message
                           </button>
-                          <button
-                            className="btn btn-black flex-1"
-                            onClick={() => addSpecialistToManaged(specialist)}
-                            disabled={managedSpecialists.some(
-                              (ms) => ms._id === specialist._id
-                            )}
-                          >
-                            {managedSpecialists.some(
-                              (ms) => ms._id === specialist._id
-                            )
-                              ? "✓ Added"
-                              : "+ Add Specialist"}
-                          </button>
+                            <button
+                              className="btn btn-black flex-1"
+                              onClick={() => addSpecialistToManaged(specialist)}
+                              disabled={managedSpecialists.some(
+                                (ms) => ms._id === specialist._id
+                              )}
+                            >
+                              {managedSpecialists.some(
+                                (ms) => ms._id === specialist._id
+                              )
+                                ? "✓ Added"
+                                : "+ Add Specialist"}
+                            </button>
                         </div>
                       </div>
                     </div>

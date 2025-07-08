@@ -47,19 +47,48 @@ const ManageSpecialists = () => {
   }
 };
 
-  const toggleSpecialistDone = async (specialistId) => {
-    try {
-      const specialist = managedSpecialists.find((s) => s._id === specialistId)
-      const newStatus = !specialist.isDone
+ const toggleSpecialistDone = async (specialistId) => {
+  try {
+    setError("");
+    const specialist = managedSpecialists.find((s) => s._id === specialistId);
+    const newStatus = !specialist.isDone;
 
-      await managedAPI.updateSpecialistStatus(specialistId, newStatus)
+    console.log("[DEBUG] Updating specialist status:", {
+      specialistId,
+      newStatus
+    });
 
-      setManagedSpecialists((prev) => prev.map((s) => (s._id === specialistId ? { ...s, isDone: newStatus } : s)))
-    } catch (error) {
-      setError("Failed to update specialist status")
-      console.error("Error updating specialist status:", error)
+    const response = await managedAPI.updateSpecialistStatus(
+      newStatus,
+      { specialistId }
+    );
+
+    if (!response.success) {
+      throw new Error(response.message || "Failed to update status");
     }
+
+    // Update local state with the updated specialist
+    setManagedSpecialists((prev) =>
+      prev.map((s) =>
+        s._id === specialistId
+          ? { ...s, isDone: newStatus }
+          : s
+      )
+    );
+  } catch (error) {
+    console.error("Error updating specialist status:", error);
+    setError(error.message || "Failed to update specialist status");
+    
+    // Revert UI if update fails
+    setManagedSpecialists((prev) =>
+      prev.map((s) =>
+        s._id === specialistId
+          ? { ...s, isDone: !s.isDone } // Revert the status
+          : s
+      )
+    );
   }
+};
 
   const removeSpecialistFromManaged = async (specialistId) => {
     try {

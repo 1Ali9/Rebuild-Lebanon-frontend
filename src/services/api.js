@@ -274,7 +274,15 @@ removeClient: createEndpoint(
     }
   ),
   removeSpecialist: createEndpoint("delete", "/managed/specialists/:id", "Failed to remove specialist"),
-  updateSpecialistStatus: createEndpoint("patch", "/managed/specialists/:id/status", "Failed to update specialist status"),
+  updateSpecialistStatus: createEndpoint(
+    "put",
+    "/managed/specialists/:specialistId/status",
+    "Failed to update specialist status",
+    {
+      dataTransformer: (isDone) => ({ isDone }),
+      urlParams: true
+    }
+  ),
   getManagedSpecialists: createEndpoint("get", "/managed/specialists", "Failed to fetch specialists"),
   getStatistics: createEndpoint("get", "/managed/statistics", "Failed to fetch statistics")
 };
