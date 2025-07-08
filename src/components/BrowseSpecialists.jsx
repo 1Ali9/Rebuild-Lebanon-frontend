@@ -62,36 +62,37 @@ const BrowseSpecialists = () => {
   }
 };
 
-  const addSpecialistToManaged = async (specialist) => {
-    const isAlreadyManaged = managedSpecialists.some(
-      (ms) => ms._id === specialist._id
-    );
-    if (isAlreadyManaged) {
-      setError("Specialist is already in your managed list");
-      return;
+ const addSpecialistToManaged = async (specialist) => {
+  const isAlreadyManaged = managedSpecialists.some(
+    (ms) => ms._id === specialist._id
+  );
+  if (isAlreadyManaged) {
+    setError("Specialist is already in your managed list");
+    return;
+  }
+
+  try {
+    setError("");
+    console.log("Adding specialist:", specialist._id);
+
+    const response = await managedAPI.addSpecialist(specialist._id);
+
+    if (!response.success) {
+      throw new Error(response.message || "Failed to add specialist");
     }
 
-    try {
-      await managedAPI.addSpecialist(specialist._id);
-
-      const newManagedSpecialist = {
-        _id: specialist._id,
-        fullname: specialist.fullname,
-        governorate: specialist.governorate,
-        district: specialist.district,
-        specialty: specialist.specialty,
-        isDone: false,
-        dateAdded: new Date(),
-        isAvailable: specialist.isAvailable,
-      };
-
-      setManagedSpecialists((prev) => [...prev, newManagedSpecialist]);
-      setError("");
-    } catch (error) {
-      setError("Failed to add specialist to managed list");
-      console.error("Error adding specialist:", error);
+    // Use the specialist data from the response
+    setManagedSpecialists((prev) => [...prev, response.specialist]);
+    setError("");
+  } catch (error) {
+    console.error("Error adding specialist:", error);
+    setError(error.message || "Failed to add specialist to managed list");
+    
+    if (error.response?.data) {
+      console.error("Error details:", error.response.data);
     }
-  };
+  }
+};
 
   const updateFilters = (field, value) => {
     setFilters((prev) => ({

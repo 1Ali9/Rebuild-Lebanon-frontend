@@ -27,18 +27,25 @@ const ManageSpecialists = () => {
     fetchManagedSpecialists()
   }, [])
 
-  const fetchManagedSpecialists = async () => {
-    try {
-      setLoading(true)
-      const response = await managedAPI.getManagedSpecialists()
-      setManagedSpecialists(response.data.specialists || [])
-    } catch (error) {
-      setError("Failed to fetch managed specialists")
-      console.error("Error fetching managed specialists:", error)
-    } finally {
-      setLoading(false)
-    }
+ const fetchManagedSpecialists = async () => {
+  try {
+    setLoading(true);
+    setError("");
+    
+    const response = await managedAPI.getManagedSpecialists();
+    
+    // Handle both response formats for backward compatibility
+    const specialistsData = response.data?.specialists || response.specialists || [];
+    
+    setManagedSpecialists(specialistsData);
+  } catch (error) {
+    console.error("Error fetching managed specialists:", error);
+    setError(error.message || "Failed to fetch managed specialists");
+    setManagedSpecialists([]); // Reset to empty array on error
+  } finally {
+    setLoading(false);
   }
+};
 
   const toggleSpecialistDone = async (specialistId) => {
     try {

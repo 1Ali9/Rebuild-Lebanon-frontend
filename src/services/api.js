@@ -113,20 +113,26 @@ axiosInstance.interceptors.response.use(
 
 // Enhanced request data preparation
 // api.js
-const prepareRequestData = (method, data, endpoint) => {
+const prepareRequestData = (method, data, endpoint, options = {}) => {
+  // Handle GET requests
   if (method.toLowerCase() === "get") {
     return { params: data };
   }
 
-  // For POST /managed/clients, send the data as is (already the ID string)
-  if (method.toLowerCase() === "post" && endpoint === "/managed/clients") {
-    return { data: data }; // Just send the ID directly
+  // Handle DELETE requests
+  if (method.toLowerCase() === "delete") {
+    return {
+      params: data,  // Send as URL parameters
+      data: {}       // Empty body
+    };
   }
 
-  if (method.toLowerCase() === "patch" && endpoint === "/users/needed-specialists") {
+  // Special handling for login endpoint
+  if (endpoint === "/auth/login") {
     return { data };
   }
 
+  // Default handling for other requests
   if (data && typeof data === "object") {
     return {
       data: {
@@ -139,28 +145,38 @@ const prepareRequestData = (method, data, endpoint) => {
   return { data };
 };
 
-// Enhanced endpoint creator with retry logic
-// api.js
+
 const createEndpoint = (method, endpoint, defaultError, options = {}) => {
-  return async (data = null, params = null, retries = 1) => {
-    try {
+return async (data = null, params = null, retries = 1) => {
+  try{
+  console.log('[DEBUG] createEndpoint - Data:', data);
+    console.log('[DEBUG] createEndpoint - Params:', params);
+    let url = endpoint;
+    if (options.urlParams && params) {
+      Object.keys(params).forEach((key) => {
+        console.log('[DEBUG] Replacing :', key, 'with', params[key]);
+        url = url.replace(`:${key}`, encodeURIComponent(params[key]));
+      });
+    }
+    console.log("[DEBUG] Constructed URL:", `${API_URL}${url}`);
+
       const config = {
         method,
-        url: endpoint,
-        ...prepareRequestData(method, options.dataTransformer ? options.dataTransformer(data) : data, endpoint)
+        url,
+        ...prepareRequestData(method, options.dataTransformer ? options.dataTransformer(data) : data, endpoint),
       };
 
       const response = await axiosInstance(config);
-      
+
       if (response.data?.user) {
         response.data.user = {
           ...response.data.user,
           governorate: response.data.user.governorate,
           district: response.data.user.district,
-          role: response.data.user.role
+          role: response.data.user.role,
         };
       }
-      
+
       return response.data;
     } catch (error) {
       console.error(`API ${method.toUpperCase()} ${endpoint} failed:`, error);
@@ -175,7 +191,7 @@ const createEndpoint = (method, endpoint, defaultError, options = {}) => {
         endpoint,
         method,
         message: error.message || defaultError,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   };
@@ -230,18 +246,33 @@ addClient: createEndpoint(
     dataTransformer: (data) => ({ clientId: data.clientId || data }) // Handles both formats
   }
 ),
-  removeClient: createEndpoint("delete", "/managed/clients/:id", "Failed to remove client"),
-  removeClient: createEndpoint("delete", "/managed/clients/:id", "Failed to remove client"),
+removeClient: createEndpoint(
+  "delete",
+  "/managed/clients/:id",
+  "Failed to remove client",
+  {
+    urlParams: true,
+    
+  }
+),
   updateClientStatus: createEndpoint(
-    "patch",
-    "/managed/relationships/:relationshipId/status",
-    "Failed to update client status",
+  "patch",
+  "/managed/relationships/:relationshipId/status",
+  "Failed to update client status",
+  {
+    dataTransformer: (isDone) => ({ isDone }),
+    urlParams: true // This enables URL parameter replacement
+  }
+),
+  getManagedClients: createEndpoint("get", "/managed/clients", "Failed to fetch clients"),
+   addSpecialist: createEndpoint(
+    "post", 
+    "/managed/specialists", 
+    "Failed to add specialist",
     {
-      dataTransformer: (isDone) => ({ isDone }), // Ensure { isDone } is sent
+      dataTransformer: (data) => ({ specialistId: data.specialistId || data }) // Handles both object and ID
     }
   ),
-  getManagedClients: createEndpoint("get", "/managed/clients", "Failed to fetch clients"),
-  addSpecialist: createEndpoint("post", "/managed/specialists", "Failed to add specialist"),
   removeSpecialist: createEndpoint("delete", "/managed/specialists/:id", "Failed to remove specialist"),
   updateSpecialistStatus: createEndpoint("patch", "/managed/specialists/:id/status", "Failed to update specialist status"),
   getManagedSpecialists: createEndpoint("get", "/managed/specialists", "Failed to fetch specialists"),
