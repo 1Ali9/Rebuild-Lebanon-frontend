@@ -1,195 +1,207 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Link, useNavigate } from "react-router-dom"
-import { useAuth } from "../contexts/AuthContext"
-import { useData } from "../contexts/DataContext"
-import { managedAPI } from "../services/api"
-import { governorates, districtByGovernorate } from "../constants/data"
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
+import { useData } from "../contexts/DataContext";
+import { managedAPI } from "../services/api";
+import { governorates, districtByGovernorate } from "../constants/data";
 
 const ManageClients = () => {
-  const { user } = useAuth()
-  const { managedClients, setManagedClients } = useData()
-  const navigate = useNavigate()
+  const { user } = useAuth();
+  const { managedClients, setManagedClients } = useData();
+  const navigate = useNavigate();
 
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [filters, setFilters] = useState({
     searchTerm: "",
     governorate: "",
     district: "",
     showDoneOnly: false,
     showPendingOnly: false,
-  })
+  });
 
   useEffect(() => {
-    fetchManagedClients()
-  }, [])
+    fetchManagedClients();
+  }, []);
 
-const fetchManagedClients = async () => {
-  try {
-    setLoading(true);
-    const response = await managedAPI.getManagedClients();
-    
-    // Handle both response formats for backward compatibility
-    const clientsData = response.clients || response.data?.clients || [];
-    setManagedClients(clientsData);
-    
-  } catch (error) {
-    console.error("Error fetching managed clients:", error);
-    setError(error.message || "Failed to fetch clients");
-    setManagedClients([]); // Reset to empty array on error
-  } finally {
-    setLoading(false);
-  }
-};
-const toggleClientDone = async (clientId) => {
-  try {
-    setError("");
+  const fetchManagedClients = async () => {
+    try {
+      setLoading(true);
+      const response = await managedAPI.getManagedClients();
 
-    // Find the client in managedClients
-    const client = managedClients.find((c) => c._id === clientId);
-    if (!client) {
-      throw new Error("Client not found in managed list");
+      // Handle both response formats for backward compatibility
+      const clientsData = response.clients || response.data?.clients || [];
+      setManagedClients(clientsData);
+    } catch (error) {
+      console.error("Error fetching managed clients:", error);
+      setError(error.message || "Failed to fetch clients");
+      setManagedClients([]); // Reset to empty array on error
+    } finally {
+      setLoading(false);
     }
+  };
+  const toggleClientDone = async (clientId) => {
+    try {
+      setError("");
 
-    // Validate we have a relationshipId
-    if (!client?.relationshipId) {
-      throw new Error("Missing relationship data for this client");
+      // Find the client in managedClients
+      const client = managedClients.find((c) => c._id === clientId);
+      if (!client) {
+        throw new Error("Client not found in managed list");
+      }
+
+      // Validate we have a relationshipId
+      if (!client?.relationshipId) {
+        throw new Error("Missing relationship data for this client");
+      }
+
+      // Validate the relationshipId format before making the request
+      if (!/^[0-9a-fA-F]{24}$/.test(client.relationshipId)) {
+        throw new Error("Invalid relationship ID format");
+      }
+
+      const newStatus = !client.isDone;
+
+      console.log("[DEBUG] Updating client status:", {
+        clientId,
+        relationshipId: client.relationshipId,
+        newStatus,
+      });
+
+      // Make the API call with proper parameters
+      const response = await managedAPI.updateClientStatus(
+        newStatus, // The status data
+        { relationshipId: client.relationshipId } // URL params
+      );
+
+      console.log("[DEBUG] Update response:", response);
+
+      if (!response.success) {
+        throw new Error(
+          response.message || "Update failed without error message"
+        );
+      }
+
+      // Update local state
+      setManagedClients((prev) =>
+        prev.map((c) => (c._id === clientId ? { ...c, isDone: newStatus } : c))
+      );
+    } catch (error) {
+      console.error("[ERROR] Client status update failed:", {
+        error: error.message,
+        clientId,
+        relationshipId: client?.relationshipId,
+        fullError: error,
+      });
+
+      setError(error.message || "Failed to update client status");
+
+      // Optional: Show a toast notification
+      // toast.error(error.message || "Failed to update status");
     }
-
-    // Validate the relationshipId format before making the request
-    if (!/^[0-9a-fA-F]{24}$/.test(client.relationshipId)) {
-      throw new Error("Invalid relationship ID format");
-    }
-
-    const newStatus = !client.isDone;
-
-    console.log("[DEBUG] Updating client status:", {
-      clientId,
-      relationshipId: client.relationshipId,
-      newStatus
-    });
-
-    // Make the API call with proper parameters
-    const response = await managedAPI.updateClientStatus(
-      newStatus, // The status data
-      { relationshipId: client.relationshipId } // URL params
+  };
+  const removeClientFromManaged = async (relationshipId) => {
+    const client = managedClients.find(
+      (c) => c.relationshipId === relationshipId
     );
+    try {
+      setError("");
 
-    console.log("[DEBUG] Update response:", response);
+      if (!client) {
+        throw new Error("Client not found in managed list");
+      }
 
-    if (!response.success) {
-      throw new Error(response.message || "Update failed without error message");
+      if (!client?.relationshipId) {
+        throw new Error("Missing relationship data for this client");
+      }
+      console.log("Sent relation Id", client.relationshipId);
+      console.log("[DEBUG] Attempting to remove client in the relationship:", {
+        relationshipId: client.relationshipId,
+        isValid: mongoose.Types.ObjectId.isValid(client.relationshipId),
+      });
+
+      const response = await managedAPI.removeClient(null, {
+        id: client.relationshipId,
+      });
+
+      console.log("[DEBUG] Delete response:", response);
+
+      if (!response.success) {
+        throw new Error(
+          response.message || "Deletion failed without error message"
+        );
+      }
+
+      setManagedClients((prev) =>
+        prev.filter((c) => c.relationshipId !== relationshipId)
+      );
+    } catch (error) {
+      console.error("[ERROR] Failed to remove client:", {
+        error: error.message,
+        relationshipId: client?.relationshipId,
+        fullError: error,
+      });
+      setError(error.message || "Failed to remove client");
     }
-
-    // Update local state
-    setManagedClients((prev) =>
-      prev.map((c) => 
-        c._id === clientId ? { ...c, isDone: newStatus } : c
-      )
-    );
-
-  } catch (error) {
-    console.error("[ERROR] Client status update failed:", {
-      error: error.message,
-      clientId,
-      relationshipId: client?.relationshipId,
-      fullError: error
-    });
-
-    setError(error.message || "Failed to update client status");
-    
-    // Optional: Show a toast notification
-    // toast.error(error.message || "Failed to update status");
-  }
-};
-const removeClientFromManaged = async (clientId) => {
-  const client = managedClients.find((c) => c._id === clientId);
-  try {
-    setError("");
-
-    if (!client) {
-      throw new Error("Client not found in managed list");
-    }
-
-    if (!client?.relationshipId) {
-      throw new Error("Missing relationship data for this client");
-    }
-
-    console.log("[DEBUG] Attempting to remove client relationship:", {
-      clientId,
-      relationshipId: client.relationshipId,
-      isValid: mongoose.Types.ObjectId.isValid(client.relationshipId),
-    });
-
-   const response = await managedAPI.removeClient({ id: client.relationshipId });
-
-    console.log("[DEBUG] Delete response:", response);
-
-    if (!response.success) {
-      throw new Error(response.message || "Deletion failed without error message");
-    }
-
-    setManagedClients((prev) => prev.filter((c) => c._id !== clientId));
-  } catch (error) {
-    console.error("[ERROR] Failed to remove client:", {
-      error: error.message,
-      clientId,
-      relationshipId: client?.relationshipId,
-      fullError: error,
-    });
-    setError(error.message || "Failed to remove client");
-  }
-};
+  };
 
   const updateFilters = (field, value) => {
     setFilters((prev) => {
-      const updated = { ...prev, [field]: value }
+      const updated = { ...prev, [field]: value };
 
       if (field === "governorate") {
-        updated.district = ""
+        updated.district = "";
       }
 
       if (field === "showDoneOnly" && value) {
-        updated.showPendingOnly = false
+        updated.showPendingOnly = false;
       }
       if (field === "showPendingOnly" && value) {
-        updated.showDoneOnly = false
+        updated.showDoneOnly = false;
       }
 
-      return updated
-    })
-  }
+      return updated;
+    });
+  };
 
   const getFilteredClients = () => {
-    let filtered = [...managedClients]
+    let filtered = [...managedClients];
 
     if (filters.searchTerm) {
-      filtered = filtered.filter((client) => client.fullname.toLowerCase().includes(filters.searchTerm.toLowerCase()))
+      filtered = filtered.filter((client) =>
+        client.fullname.toLowerCase().includes(filters.searchTerm.toLowerCase())
+      );
     }
 
     if (filters.governorate) {
-      filtered = filtered.filter((client) => client.governorate === filters.governorate)
+      filtered = filtered.filter(
+        (client) => client.governorate === filters.governorate
+      );
     }
 
     if (filters.district) {
-      filtered = filtered.filter((client) => client.district === filters.district)
+      filtered = filtered.filter(
+        (client) => client.district === filters.district
+      );
     }
 
     if (filters.showDoneOnly) {
-      filtered = filtered.filter((client) => client.isDone)
+      filtered = filtered.filter((client) => client.isDone);
     }
 
     if (filters.showPendingOnly) {
-      filtered = filtered.filter((client) => !client.isDone)
+      filtered = filtered.filter((client) => !client.isDone);
     }
 
-    return filtered
-  }
+    return filtered;
+  };
 
-  const filteredClients = getFilteredClients()
-  const availableDistricts = filters.governorate ? districtByGovernorate[filters.governorate] || [] : []
+  const filteredClients = getFilteredClients();
+  const availableDistricts = filters.governorate
+    ? districtByGovernorate[filters.governorate] || []
+    : [];
 
   return (
     <div className="app-container">
@@ -223,7 +235,9 @@ const removeClientFromManaged = async (clientId) => {
                       className="form-input"
                       placeholder="Search client name..."
                       value={filters.searchTerm}
-                      onChange={(e) => updateFilters("searchTerm", e.target.value)}
+                      onChange={(e) =>
+                        updateFilters("searchTerm", e.target.value)
+                      }
                     />
                   </div>
 
@@ -232,7 +246,9 @@ const removeClientFromManaged = async (clientId) => {
                     <select
                       className="form-select"
                       value={filters.governorate}
-                      onChange={(e) => updateFilters("governorate", e.target.value)}
+                      onChange={(e) =>
+                        updateFilters("governorate", e.target.value)
+                      }
                     >
                       <option value="">All Governorates</option>
                       {governorates.map((gov) => (
@@ -248,7 +264,9 @@ const removeClientFromManaged = async (clientId) => {
                     <select
                       className="form-select"
                       value={filters.district}
-                      onChange={(e) => updateFilters("district", e.target.value)}
+                      onChange={(e) =>
+                        updateFilters("district", e.target.value)
+                      }
                       disabled={!filters.governorate}
                     >
                       <option value="">All Districts</option>
@@ -267,7 +285,9 @@ const removeClientFromManaged = async (clientId) => {
                         <input
                           type="checkbox"
                           checked={filters.showDoneOnly}
-                          onChange={(e) => updateFilters("showDoneOnly", e.target.checked)}
+                          onChange={(e) =>
+                            updateFilters("showDoneOnly", e.target.checked)
+                          }
                         />
                         Done Only
                       </label>
@@ -275,7 +295,9 @@ const removeClientFromManaged = async (clientId) => {
                         <input
                           type="checkbox"
                           checked={filters.showPendingOnly}
-                          onChange={(e) => updateFilters("showPendingOnly", e.target.checked)}
+                          onChange={(e) =>
+                            updateFilters("showPendingOnly", e.target.checked)
+                          }
                         />
                         Pending Only
                       </label>
@@ -289,10 +311,13 @@ const removeClientFromManaged = async (clientId) => {
             <div>
               <div className="flex justify-between items-center mb-4">
                 <h3>
-                  Client List ({filteredClients.length} of {managedClients.length} clients)
+                  Client List ({filteredClients.length} of{" "}
+                  {managedClients.length} clients)
                 </h3>
                 <div className="flex gap-2">
-                  <span className="badge badge-available">✓ Done: {managedClients.filter((c) => c.isDone).length}</span>
+                  <span className="badge badge-available">
+                    ✓ Done: {managedClients.filter((c) => c.isDone).length}
+                  </span>
                   <span className="badge badge-unavailable">
                     ⏳ Pending: {managedClients.filter((c) => !c.isDone).length}
                   </span>
@@ -325,19 +350,32 @@ const removeClientFromManaged = async (clientId) => {
               ) : (
                 <div className="dashboard-grid">
                   {filteredClients.map((client) => (
-                    <div key={client._id} className={`dashboard-item ${client.isDone ? "client-done" : ""}`}>
+                    <div
+                      key={client._id}
+                      className={`dashboard-item ${
+                        client.isDone ? "client-done" : ""
+                      }`}
+                    >
                       <div className="dashboard-item-header">
                         <div className="flex justify-between items-start">
                           <div>
                             <h4 className="flex items-center gap-2">
                               {client.fullname}
-                              {client.isDone && <span className="text-green-600">✓</span>}
+                              {client.isDone && (
+                                <span className="text-green-600">✓</span>
+                              )}
                             </h4>
                             <p>
                               {client.district}, {client.governorate}
                             </p>
                           </div>
-                          <span className={`badge ${client.isDone ? "badge-available" : "badge-unavailable"}`}>
+                          <span
+                            className={`badge ${
+                              client.isDone
+                                ? "badge-available"
+                                : "badge-unavailable"
+                            }`}
+                          >
                             {client.isDone ? "Done" : "Pending"}
                           </span>
                         </div>
@@ -345,18 +383,25 @@ const removeClientFromManaged = async (clientId) => {
                       <div className="dashboard-item-content">
                         <div className="mb-3">
                           <p className="text-sm text-gray-600">
-                            Added: {new Date(client.dateAdded).toLocaleDateString()}
+                            Added:{" "}
+                            {new Date(client.dateAdded).toLocaleDateString()}
                           </p>
                           {client.neededSpecialists && (
                             <div className="mt-2">
-                              <h6 className="text-sm font-medium mb-1">Needed Services:</h6>
+                              <h6 className="text-sm font-medium mb-1">
+                                Needed Services:
+                              </h6>
                               <div className="flex flex-wrap gap-1">
                                 {client.neededSpecialists
                                   ?.filter((spec) => spec.isNeeded)
                                   .map((spec) => (
                                     <span
                                       key={spec.name}
-                                      className={`badge ${spec.name === user.specialty ? "badge-available" : "badge-unavailable"}`}
+                                      className={`badge ${
+                                        spec.name === user.specialty
+                                          ? "badge-available"
+                                          : "badge-unavailable"
+                                      }`}
                                     >
                                       {spec.name}
                                     </span>
@@ -367,15 +412,25 @@ const removeClientFromManaged = async (clientId) => {
                         </div>
                         <div className="flex gap-2">
                           <button
-                            className={`btn ${client.isDone ? "btn-secondary" : "btn-primary"} flex-1`}
+                            className={`btn ${
+                              client.isDone ? "btn-secondary" : "btn-primary"
+                            } flex-1`}
                             onClick={() => toggleClientDone(client._id)}
                           >
                             {client.isDone ? "Mark Pending" : "Mark Done"}
                           </button>
-                          <button className="btn btn-nav" onClick={() => navigate(`/chat/${client.fullname}`)}>
+                          <button
+                            className="btn btn-nav"
+                            onClick={() => navigate(`/chat/${client.fullname}`)}
+                          >
                             💬
                           </button>
-                          <button className="btn btn-danger" onClick={() => removeClientFromManaged(client._id)}>
+                          <button
+                            className="btn btn-danger"
+                            onClick={() =>
+                              removeClientFromManaged(client.relationshipId)
+                            }
+                          >
                             🗑️
                           </button>
                         </div>
@@ -389,7 +444,7 @@ const removeClientFromManaged = async (clientId) => {
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default ManageClients
+export default ManageClients;
