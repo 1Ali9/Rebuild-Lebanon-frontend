@@ -17,7 +17,11 @@ const BrowseSpecialists = () => {
   const navigate = useNavigate();
 
   const [specialists, setSpecialists] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState({
+    specialists: false,
+    managed: false,
+    initialLoad: true
+  });
   const [error, setError] = useState("");
   const [filters, setFilters] = useState({
     governorate: "",
@@ -27,83 +31,106 @@ const BrowseSpecialists = () => {
   });
 
   useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        setLoading(prev => ({ ...prev, managed: true }));
+        const response = await managedAPI.getManagedSpecialists();
+        setManagedSpecialists(response.data?.specialists || []);
+      } catch (error) {
+        console.error("Error fetching managed specialists:", error);
+        setError("Failed to load your specialist list");
+      } finally {
+        setLoading(prev => ({ ...prev, managed: false, initialLoad: false }));
+      }
+    };
+    
+    fetchInitialData();
     fetchSpecialists();
+  }, []);
+
+  useEffect(() => {
+    if (!loading.initialLoad) {
+      fetchSpecialists();
+    }
   }, [filters]);
 
   const fetchSpecialists = async () => {
-  try {
-    setLoading(true);
-    setError("");
+    try {
+      setLoading(prev => ({ ...prev, specialists: true }));
+      setError("");
 
-    // Prepare query params from filters
-    const params = {
-      governorate: filters.governorate || undefined,
-      district: filters.district || undefined,
-      specialty: filters.specialty || undefined,
-      isAvailable: filters.availableOnly || undefined,
-    };
+      const params = {
+        governorate: filters.governorate || undefined,
+        district: filters.district || undefined,
+        specialty: filters.specialty || undefined,
+        isAvailable: filters.availableOnly || undefined,
+      };
 
-    // Clean undefined params
-    Object.keys(params).forEach(
-      (key) => params[key] === undefined && delete params[key]
-    );
+      Object.keys(params).forEach(
+        (key) => params[key] === undefined && delete params[key]
+      );
 
-    const response = await usersAPI.getSpecialists(params);
-
-    // Handle the standardized response format
-    setSpecialists(response.data?.specialists || []);
-
-  } catch (error) {
-    setError(error.message || "Failed to fetch specialists");
-    console.error("Error fetching specialists:", error);
-    setSpecialists([]);
-  } finally {
-    setLoading(false);
-  }
-};
-
-const addSpecialistToManaged = async (specialist) => {
-  try {
-    setError("");
-    console.log("Adding specialist:", specialist._id);
-
-    // Check both local state and API response
-    const isAlreadyManaged = managedSpecialists.some(
-      (ms) => ms._id === specialist._id
-    );
-    
-    if (isAlreadyManaged) {
-      // If local state says already managed, refresh from server
-      await fetchManagedSpecialists(); // Add this function if not exists
-      return;
+      const response = await usersAPI.getSpecialists(params);
+      setSpecialists(response.data?.specialists || []);
+    } catch (error) {
+      setError(error.message || "Failed to fetch specialists");
+      console.error("Error fetching specialists:", error);
+      setSpecialists([]);
+    } finally {
+      setLoading(prev => ({ ...prev, specialists: false }));
     }
+  };
 
-    const response = await managedAPI.addSpecialist(specialist._id);
+  const fetchManagedSpecialists = async () => {
+    try {
+      setLoading(prev => ({ ...prev, managed: true }));
+      const response = await managedAPI.getManagedSpecialists();
+      setManagedSpecialists(response.data?.specialists || []);
+    } catch (error) {
+      console.error("Error fetching managed specialists:", error);
+      setError("Failed to refresh your specialist list");
+    } finally {
+      setLoading(prev => ({ ...prev, managed: false }));
+    }
+  };
 
-    if (!response.success) {
-      throw new Error(response.message || "Failed to add specialist");
-    }
+  const addSpecialistToManaged = async (specialist) => {
+    try {
+      setError("");
+      console.log("Adding specialist:", specialist._id);
 
-    // Update local state with the new specialist
-    setManagedSpecialists((prev) => [...prev, response.specialist]);
-    setError("");
-  } catch (error) {
-    console.error("Error adding specialist:", error);
-    
-    // Handle 409 conflict specifically
-    if (error.code === 409) {
-      // Refresh managed specialists list
-      await fetchManagedSpecialists();
-      setError("This specialist was already in your list");
-    } else {
-      setError(error.message || "Failed to add specialist to managed list");
+      const isAlreadyManaged = managedSpecialists.some(
+        (ms) => ms._id === specialist._id
+      );
+      
+      if (isAlreadyManaged) {
+        await fetchManagedSpecialists();
+        return;
+      }
+
+      const response = await managedAPI.addSpecialist(specialist._id);
+
+      if (!response.success) {
+        throw new Error(response.message || "Failed to add specialist");
+      }
+
+      setManagedSpecialists((prev) => [...prev, response.specialist]);
+      setError("");
+    } catch (error) {
+      console.error("Error adding specialist:", error);
+      
+      if (error.code === 409) {
+        await fetchManagedSpecialists();
+        setError("This specialist was already in your list");
+      } else {
+        setError(error.message || "Failed to add specialist to managed list");
+      }
+      
+      if (error.response?.data) {
+        console.error("Error details:", error.response.data);
+      }
     }
-    
-    if (error.response?.data) {
-      console.error("Error details:", error.response.data);
-    }
-  }
-};
+  };
 
   const updateFilters = (field, value) => {
     setFilters((prev) => ({
@@ -218,76 +245,80 @@ const addSpecialistToManaged = async (specialist) => {
             {/* Results */}
             <div>
               <h3 className="mb-4">
-                {loading
-                  ? "Loading..."
+                {loading.specialists || loading.initialLoad
+                  ? "Loading specialists..."
                   : `Found ${specialists.length} specialist${
                       specialists.length !== 1 ? "s" : ""
                     }`}
               </h3>
 
-              {loading ? (
+              {loading.initialLoad ? (
                 <div className="text-center p-4">
                   <div className="loading-spinner">
                     <div className="spinner"></div>
-                    Loading...
+                    Loading specialist data...
                   </div>
                 </div>
               ) : (
                 <div className="dashboard-grid">
-                  {specialists.map((specialist) => (
-                    <div key={specialist._id} className="dashboard-item">
-                      <div className="dashboard-item-header">
-                        <div className="flex justify-between items-start">
-                          <h4>{specialist.fullname}</h4>
-                          <span
-                            className={`badge ${
-                              specialist.isAvailable
-                                ? "badge-available"
-                                : "badge-unavailable"
-                            }`}
-                          >
-                            {specialist.isAvailable
-                              ? "Available"
-                              : "Unavailable"}
-                          </span>
-                        </div>
-                        <p>{specialist.specialty}</p>
-                      </div>
-                      <div className="dashboard-item-content">
-                        <p className="mb-4">
-                          <strong>Location:</strong> {specialist.district},{" "}
-                          {specialist.governorate}
-                        </p>
-                        <div className="flex gap-2">
-                          <button
-                            className="btn btn-primary flex-1"
-                            onClick={() =>
-                              navigate(`/chat/${specialist.fullname}`)
-                            }
-                          >
-                            💬 Message
-                          </button>
-                            <button
-                              className="btn btn-black flex-1"
-                              onClick={() => addSpecialistToManaged(specialist)}
-                              disabled={managedSpecialists.some(
-                                (ms) => ms._id === specialist._id
-                              )}
+                  {specialists.map((specialist) => {
+                    const isManaged = managedSpecialists.some(
+                      (ms) => ms._id === specialist._id
+                    );
+                    
+                    return (
+                      <div key={specialist._id} className="dashboard-item">
+                        <div className="dashboard-item-header">
+                          <div className="flex justify-between items-start">
+                            <h4>{specialist.fullname}</h4>
+                            <span
+                              className={`badge ${
+                                specialist.isAvailable
+                                  ? "badge-available"
+                                  : "badge-unavailable"
+                              }`}
                             >
-                              {managedSpecialists.some(
-                                (ms) => ms._id === specialist._id
-                              )
+                              {specialist.isAvailable
+                                ? "Available"
+                                : "Unavailable"}
+                            </span>
+                          </div>
+                          <p>{specialist.specialty}</p>
+                        </div>
+                        <div className="dashboard-item-content">
+                          <p className="mb-4">
+                            <strong>Location:</strong> {specialist.district},{" "}
+                            {specialist.governorate}
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              className="btn btn-primary flex-1"
+                              onClick={() =>
+                                navigate(`/chat/${specialist.fullname}`)
+                              }
+                            >
+                              💬 Message
+                            </button>
+                            <button
+                              className={`btn btn-black flex-1 ${
+                                isManaged ? "added-specialist" : ""
+                              }`}
+                              onClick={() => addSpecialistToManaged(specialist)}
+                              disabled={isManaged || loading.managed}
+                            >
+                              {isManaged
                                 ? "✓ Added"
                                 : "+ Add Specialist"}
                             </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
-              {!loading && specialists.length === 0 && (
+              {!loading.initialLoad && !loading.specialists && specialists.length === 0 && (
                 <div className="dashboard-item">
                   <div className="dashboard-item-content text-center p-4">
                     <p>No specialists found matching your criteria.</p>
