@@ -17,18 +17,23 @@ const Conversations = () => {
     fetchConversations()
   }, [])
 
-  const fetchConversations = async () => {
-    try {
-      setLoading(true)
-      const response = await messagesAPI.getConversations()
-      setConversations(response.data.conversations || [])
-    } catch (error) {
-      setError("Failed to fetch conversations")
-      console.error("Error fetching conversations:", error)
-    } finally {
-      setLoading(false)
-    }
+
+const fetchConversations = async () => {
+  try {
+    setLoading(true);
+    const response = await messagesAPI.getConversations();
+    
+    // Handle standardized response
+    setConversations(response.conversations || []);
+    setError("");
+  } catch (error) {
+    setError(error.message || "Failed to fetch conversations");
+    console.error("Error fetching conversations:", error);
+    setConversations([]);
+  } finally {
+    setLoading(false);
   }
+};
 
   const openConversation = (conversation) => {
     navigate(`/chat/${conversation.otherParticipant}`)

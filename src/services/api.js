@@ -47,23 +47,44 @@ axiosInstance.interceptors.request.use(
 
 // Enhanced response interceptor with CORS/network error handling
 axiosInstance.interceptors.response.use(
-  (response) => {
-    // Standardize successful responses
-    return {
+   (response) => {
+    // Preserve the original response structure but standardize success flag
+    const standardizedResponse = {
       ...response,
       data: {
         success: true,
-        ...response.data,
-        user: response.data?.user 
-          ? {
-              ...response.data.user,
-              governorate: response.data.user.governorate,
-              district: response.data.user.district,
-              role: response.data.user.role
-            }
-          : undefined
+        ...response.data, // Keep original structure
+        // Only transform user data if it exists
+        ...(response.data?.user ? {
+          user: {
+            ...response.data.user,
+            governorate: response.data.user.governorate,
+            district: response.data.user.district,
+            role: response.data.user.role
+          }
+        } : {})
       }
     };
+
+    // Special handling for arrays (like specialists/clients lists)
+    if (Array.isArray(response.data?.data)) {
+      standardizedResponse.data = {
+        success: true,
+        data: response.data.data // Preserve array structure
+      };
+    } else if (Array.isArray(response.data?.specialists)) {
+      standardizedResponse.data = {
+        success: true,
+        specialists: response.data.specialists // Preserve specialists array
+      };
+    } else if (Array.isArray(response.data?.clients)) {
+      standardizedResponse.data = {
+        success: true,
+        clients: response.data.clients // Preserve clients array
+      };
+    }
+
+    return standardizedResponse;
   },
   (error) => {
     // Handle network/CORS errors specifically
@@ -231,9 +252,11 @@ updateNeededSpecialists: createEndpoint(
 
 export const messagesAPI = {
   getConversations: createEndpoint("get", "/messages/conversations", "Failed to fetch conversations"),
-  getMessages: createEndpoint("get", "/messages/conversation/:id", "Failed to fetch messages"),
+  getMessages: createEndpoint("get", "/messages/conversation/:conversationId", "Failed to fetch messages"),
   sendMessage: createEndpoint("post", "/messages", "Failed to send message"),
-  createConversation: createEndpoint("post", "/messages/conversations", "Failed to create conversation"),
+  createConversation: createEndpoint("post", "/messages/conversations", "Failed to create conversation", {
+    dataTransformer: (data) => ({ participantId: data.participantId || data })
+  }),
   markAsRead: createEndpoint("patch", "/messages/:id/read", "Failed to mark as read")
 };
 

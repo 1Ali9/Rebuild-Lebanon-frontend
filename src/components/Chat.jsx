@@ -24,36 +24,51 @@ const Chat = () => {
     }
   }, [participantName])
 
-  const initializeChat = async () => {
-    try {
-      setLoading(true)
-      const userResponse = user.role === "client" 
-        ? await usersAPI.getSpecialists({ fullname: participantName })
-        : await usersAPI.getClients({ fullname: participantName })
-      const foundParticipant = userResponse.data.users[0]
-      if (!foundParticipant) {
-        throw new Error("Participant not found")
-      }
-      setParticipant(foundParticipant)
-      const response = await messagesAPI.createConversation(participantName)
-      setConversationId(response.data.conversationId)
-      setMessages(response.data.messages || [])
-    } catch (error) {
-      setError("Failed to initialize chat")
-      console.error("Error initializing chat:", error)
-    } finally {
-      setLoading(false)
+const initializeChat = async () => {
+  try {
+    setLoading(true);
+    setError("");
+    
+    // Get participant data
+    const userResponse = user.role === "client" 
+      ? await usersAPI.getSpecialists({ fullname: participantName })
+      : await usersAPI.getClients({ fullname: participantName });
+    
+    const participants = userResponse.data?.specialists || userResponse.data?.clients || [];
+    
+    if (participants.length === 0) {
+      throw new Error("Participant not found");
     }
+    
+    const foundParticipant = participants[0];
+    setParticipant(foundParticipant);
+    
+    // Only send participantId - backend will get current user from auth
+    const response = await messagesAPI.createConversation({
+      participantId: foundParticipant._id
+    });
+    
+    if (!response.conversationId) {
+      throw new Error("Failed to create conversation");
+    }
+    
+    setConversationId(response.conversationId);
+    setMessages(response.messages || []);
+  } catch (error) {
+    setError(error.message || "Failed to initialize chat");
+    console.error("Error initializing chat:", error);
+    navigate("/conversations");
+  } finally {
+    setLoading(false);
   }
-
+};
   const sendMessage = async () => {
     if (!newMessage.trim()) return
     try {
       setLoading(true)
       const response = await messagesAPI.sendMessage({
-        recipientName: participantName,
-        message: newMessage,
         conversationId,
+        message: newMessage
       })
       setMessages((prev) => [...prev, response.data.message])
       setNewMessage("")
@@ -87,13 +102,13 @@ const Chat = () => {
     }
   }
 
-  const isInManagedList = () => {
-    if (user.role === "client") {
-      return managedSpecialists.some((ms) => ms.fullname === participantName)
-    } else {
-      return managedClients.some((mc) => ms.fullname === participantName)
-    }
+const isInManagedList = () => {
+  if (user.role === "client") {
+    return managedSpecialists.some((ms) => ms.fullname === participantName);
+  } else {
+    return managedClients.some((mc) => mc.fullname === participantName); // Fixed 'ms' to 'mc'
   }
+};
 
   return (
     <div className="app-container">
