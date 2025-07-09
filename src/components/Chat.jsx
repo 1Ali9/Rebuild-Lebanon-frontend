@@ -24,44 +24,48 @@ const Chat = () => {
     }
   }, [participantName])
 
-const initializeChat = async () => {
-  try {
-    setLoading(true);
-    setError("");
-    
-    // Get participant data
-    const userResponse = user.role === "client" 
-      ? await usersAPI.getSpecialists({ fullname: participantName })
-      : await usersAPI.getClients({ fullname: participantName });
-    
-    const participants = userResponse.data?.specialists || userResponse.data?.clients || [];
-    
-    if (participants.length === 0) {
-      throw new Error("Participant not found");
+  const initializeChat = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      
+      // Get participant data
+      const userResponse = user.role === "client" 
+        ? await usersAPI.getSpecialists({ fullname: participantName })
+        : await usersAPI.getClients({ fullname: participantName });
+      
+      const participants = userResponse.data?.specialists || userResponse.data?.clients || [];
+      
+      if (participants.length === 0) {
+        throw new Error("Participant not found");
+      }
+      
+      const foundParticipant = participants[0];
+      setParticipant(foundParticipant);
+      
+      // Only send participantId - backend will get current user from auth
+      const response = await messagesAPI.createConversation({
+        participantId: foundParticipant._id
+      });
+      
+      if (!response.conversationId) {
+        throw new Error("Failed to create conversation");
+      }
+      
+      setConversationId(response.conversationId);
+      
+      // Fetch all existing messages for the conversation
+      const messagesResponse = await messagesAPI.getMessages(null, { conversationId: response.conversationId });
+      setMessages(messagesResponse.messages || []);
+    } catch (error) {
+      setError(error.message || "Failed to initialize chat");
+      console.error("Error initializing chat:", error);
+      navigate("/conversations");
+    } finally {
+      setLoading(false);
     }
-    
-    const foundParticipant = participants[0];
-    setParticipant(foundParticipant);
-    
-    // Only send participantId - backend will get current user from auth
-    const response = await messagesAPI.createConversation({
-      participantId: foundParticipant._id
-    });
-    
-    if (!response.conversationId) {
-      throw new Error("Failed to create conversation");
-    }
-    
-    setConversationId(response.conversationId);
-    setMessages(response.messages || []);
-  } catch (error) {
-    setError(error.message || "Failed to initialize chat");
-    console.error("Error initializing chat:", error);
-    navigate("/conversations");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
+
   const sendMessage = async () => {
     if (!newMessage.trim()) return
     try {
@@ -102,13 +106,13 @@ const initializeChat = async () => {
     }
   }
 
-const isInManagedList = () => {
-  if (user.role === "client") {
-    return managedSpecialists.some((ms) => ms.fullname === participantName);
-  } else {
-    return managedClients.some((mc) => mc.fullname === participantName); // Fixed 'ms' to 'mc'
-  }
-};
+  const isInManagedList = () => {
+    if (user.role === "client") {
+      return managedSpecialists.some((ms) => ms.fullname === participantName);
+    } else {
+      return managedClients.some((mc) => mc.fullname === participantName);
+    }
+  };
 
   return (
     <div className="app-container">
@@ -135,17 +139,20 @@ const isInManagedList = () => {
           <div className="chat-content">
             {error && <div className="error-message">{error}</div>}
             <div className="chat-messages">
-              {messages.map((message) => (
-                <div
-                  key={message._id}
-                  className={`message ${message.sender === user.fullname ? "message-sent" : "message-received"}`}
-                >
-                  <div className="message-content">
-                    <p>{message.message}</p>
-                    <span className="message-time">{new Date(message.timestamp).toLocaleTimeString()}</span>
-                  </div>
-                </div>
-              ))}
+              {Array.isArray(messages) ? (
+                messages.map((message) => (
+                  message ? (
+                    <div key={message._id} className={`message ${message.sender === user.fullname ? "message-sent" : "message-received"}`}>
+                      <div className="message-content">
+                        <p>{message.message}</p>
+                        <span className="message-time">{new Date(message.timestamp).toLocaleTimeString()}</span>
+                      </div>
+                    </div>
+                  ) : null
+                ))
+              ) : (
+                <p>No messages to display</p>
+              )}
             </div>
             <div className="chat-input">
               <input

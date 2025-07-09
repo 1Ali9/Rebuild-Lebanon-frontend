@@ -252,7 +252,7 @@ updateNeededSpecialists: createEndpoint(
 
 export const messagesAPI = {
   getConversations: createEndpoint("get", "/messages/conversations", "Failed to fetch conversations"),
-  getMessages: createEndpoint("get", "/messages/conversation/:conversationId", "Failed to fetch messages"),
+  getMessages: createEndpoint("get", "/messages/conversation/:conversationId", "Failed to fetch messages", { urlParams: true }),
   sendMessage: createEndpoint("post", "/messages", "Failed to send message"),
   createConversation: createEndpoint("post", "/messages/conversations", "Failed to create conversation", {
     dataTransformer: (data) => ({ participantId: data.participantId || data })
