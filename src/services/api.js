@@ -289,6 +289,7 @@ export const usersAPI = {
 };
 
 export const messagesAPI = {
+<<<<<<< HEAD
   getConversations: createEndpoint(
     "get",
     "/messages/conversations",
@@ -299,6 +300,10 @@ export const messagesAPI = {
     "/messages/conversation/:conversationId",
     "Failed to fetch messages"
   ),
+=======
+  getConversations: createEndpoint("get", "/messages/conversations", "Failed to fetch conversations"),
+  getMessages: createEndpoint("get", "/messages/conversation/:conversationId", "Failed to fetch messages", { urlParams: true }),
+>>>>>>> c263f34318cf43e12b6560305dae9a33c9d70422
   sendMessage: createEndpoint("post", "/messages", "Failed to send message"),
   createConversation: createEndpoint(
     "post",
