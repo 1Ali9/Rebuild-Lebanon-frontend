@@ -42,66 +42,33 @@ const ManageClients = () => {
       setLoading(false);
     }
   };
-  const toggleClientDone = async (clientId) => {
-    try {
-      setError("");
+const toggleClientDone = async (clientId) => {
+  const client = managedClients.find(c => c._id === clientId);
+  
+  try {
+    const newStatus = !client.isDone;
+    
+    const response = await managedAPI.updateClientStatus(
+      { 
+        isDone: newStatus,
+        clientId: client._id // Send client ID
+      },
+      { relationshipId: client.relationshipId }
+    );
 
-      // Find the client in managedClients
-      const client = managedClients.find((c) => c._id === clientId);
-      if (!client) {
-        throw new Error("Client not found in managed list");
-      }
-
-      // Validate we have a relationshipId
-      if (!client?.relationshipId) {
-        throw new Error("Missing relationship data for this client");
-      }
-
-      // Validate the relationshipId format before making the request
-      if (!/^[0-9a-fA-F]{24}$/.test(client.relationshipId)) {
-        throw new Error("Invalid relationship ID format");
-      }
-
-      const newStatus = !client.isDone;
-
-      console.log("[DEBUG] Updating client status:", {
-        clientId,
-        relationshipId: client.relationshipId,
-        newStatus,
-      });
-
-      // Make the API call with proper parameters
-      const response = await managedAPI.updateClientStatus(
-        newStatus, // The status data
-        { relationshipId: client.relationshipId } // URL params
-      );
-
-      console.log("[DEBUG] Update response:", response);
-
-      if (!response.success) {
-        throw new Error(
-          response.message || "Update failed without error message"
-        );
-      }
-
-      // Update local state
-      setManagedClients((prev) =>
-        prev.map((c) => (c._id === clientId ? { ...c, isDone: newStatus } : c))
-      );
-    } catch (error) {
-      console.error("[ERROR] Client status update failed:", {
-        error: error.message,
-        clientId,
-        relationshipId: client?.relationshipId,
-        fullError: error,
-      });
-
-      setError(error.message || "Failed to update client status");
-
-      // Optional: Show a toast notification
-      // toast.error(error.message || "Failed to update status");
-    }
-  };
+    // Update UI if successful
+    setManagedClients(prev => 
+      prev.map(c => c._id === clientId ? {...c, isDone: newStatus} : c)
+    );
+    
+  } catch (error) {
+    console.error("Update failed:", error);
+    // Revert UI on error
+    setManagedClients(prev => 
+      prev.map(c => c._id === clientId ? {...c, isDone: !c.isDone} : c)
+    );
+  }
+};
   const removeClientFromManaged = async (relationshipId) => {
     const client = managedClients.find(
       (c) => c.relationshipId === relationshipId

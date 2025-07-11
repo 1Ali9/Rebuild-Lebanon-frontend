@@ -80,7 +80,22 @@ const Chat = () => {
       initializeChat();
     }
   }, [participantId]);
+useEffect(() => {
+  if (!conversationId) return;
 
+  const pollInterval = setInterval(async () => {
+    try {
+      const messagesResponse = await messagesAPI.getMessages(null, {
+        conversationId: conversationId,
+      });
+      setMessages(messagesResponse?.messages || []);
+    } catch (error) {
+      console.error("Error polling messages:", error);
+    }
+  }, 2000); // Check every 3 seconds
+
+  return () => clearInterval(pollInterval);
+}, [conversationId]);
   const sendMessage = async () => {
     if (!newMessage.trim()) return;
     try {

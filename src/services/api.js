@@ -404,11 +404,14 @@ export const managedAPI = {
   ),
   updateClientStatus: createEndpoint(
     "patch",
-    "/managed/relationships/:relationshipId/status",
+    "/managed/relationships/client/:relationshipId/status",
     "Failed to update client status",
     {
-      dataTransformer: (isDone) => ({ isDone }),
-      urlParams: true, // This enables URL parameter replacement
+      urlParams: true,
+      dataTransformer: (data) => ({
+        isDone: data.isDone,
+        clientId: data.clientId
+      })
     }
   ),
   getManagedClients: createEndpoint(
@@ -429,18 +432,17 @@ export const managedAPI = {
     urlParams: true,
     
   }),
-  removeSpecialist: createEndpoint(
-    "delete",
-    "/managed/specialists/:id",
-    "Failed to remove specialist"
-  ),
+ 
   updateSpecialistStatus: createEndpoint(
     "patch",
-    "/managed/specialists/:specialistId/status",
+    "/managed/relationships/specialist/:relationshipId/status",
     "Failed to update specialist status",
     {
-      dataTransformer: (isDone) => ({ isDone }),
       urlParams: true,
+      dataTransformer: (data) => ({
+        isDone: data.isDone,
+        specialistId: data.specialistId
+      })
     }
   ),
   getManagedSpecialists: createEndpoint(

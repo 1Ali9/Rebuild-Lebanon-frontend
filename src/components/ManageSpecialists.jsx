@@ -52,57 +52,88 @@ const ManageSpecialists = () => {
     }
   };
 
-  const toggleSpecialistDone = async (specialistId) => {
-    try {
-      setError("");
-      const specialist = managedSpecialists.find((s) => s._id === specialistId);
-      const newStatus = !specialist.isDone;
+const toggleSpecialistDone = async (specialistId) => {
+  const specialist = managedSpecialists.find(s => s._id === specialistId);
+  
+  try {
+    const newStatus = !specialist.isDone;
+    
+    const response = await managedAPI.updateSpecialistStatus(
+      { 
+        isDone: newStatus,
+        specialistId: specialist._id // Send specialist ID too
+      },
+      { relationshipId: specialist.relationshipId }
+    );
 
-      console.log("[DEBUG] Updating specialist status:", {
-        specialistId,
-        newStatus,
-      });
-
-      const response = await managedAPI.updateSpecialistStatus(newStatus, {
-        specialistId,
-      });
-
-      if (!response.success) {
-        throw new Error(response.message || "Failed to update status");
-      }
-
-      // Update local state with the updated specialist
-      setManagedSpecialists((prev) =>
-        prev.map((s) =>
-          s._id === specialistId ? { ...s, isDone: newStatus } : s
-        )
-      );
-    } catch (error) {
-      console.error("Error updating specialist status:", error);
-      setError(error.message || "Failed to update specialist status");
-
-      // Revert UI if update fails
-      setManagedSpecialists((prev) =>
-        prev.map((s) =>
-          s._id === specialistId
-            ? { ...s, isDone: !s.isDone } // Revert the status
-            : s
-        )
-      );
-    }
-  };
+    // Update UI if successful
+    setManagedSpecialists(prev => 
+      prev.map(s => s._id === specialistId ? {...s, isDone: newStatus} : s)
+    );
+    
+  } catch (error) {
+    console.error("Update failed:", error);
+    // Revert UI on error
+    setManagedSpecialists(prev => 
+      prev.map(s => s._id === specialistId ? {...s, isDone: !s.isDone} : s)
+    );
+  }
+};
 
   const removeSpecialistFromManaged = async (specialistId) => {
-    try {
-      await managedAPI.removeSpecialist(null, { id: specialistId });
-      setManagedSpecialists((prev) =>
-        prev.filter((s) => s._id !== specialistId)
-      );
-    } catch (error) {
-      setError("Failed to remove specialist");
-      console.error("Error removing specialist:", error);
+  const specialist = managedSpecialists.find(
+    (s) => s._id === specialistId
+  );
+  
+  try {
+    setError("");
+
+    // 1. Check if specialist exists in managed list
+    if (!specialist) {
+      throw new Error("Specialist not found in managed list");
     }
-  };
+
+    // 2. Validate relationship ID exists
+    if (!specialist?.relationshipId) {
+      throw new Error("Missing relationship data for this specialist");
+    }
+
+    // 3. Debug logging before API call
+    console.log("Sent relation Id", specialist.relationshipId);
+    console.log("[DEBUG] Attempting to remove specialist in the relationship:", {
+      relationshipId: specialist.relationshipId,
+      isValid: mongoose.Types.ObjectId.isValid(specialist.relationshipId),
+    });
+
+    // 4. Make API call to remove specialist
+    const response = await managedAPI.removeSpecialist(null, {
+      id: specialist.relationshipId,
+    });
+
+    console.log("[DEBUG] Delete response:", response);
+
+    // 5. Validate API response
+    if (!response.success) {
+      throw new Error(
+        response.message || "Deletion failed without error message"
+      );
+    }
+
+    // 6. Update local state if successful
+    setManagedSpecialists((prev) =>
+      prev.filter((s) => s._id !== specialistId)
+    );
+
+  } catch (error) {
+    // 7. Enhanced error handling
+    console.error("[ERROR] Failed to remove specialist:", {
+      error: error.message,
+      relationshipId: specialist?.relationshipId,
+      fullError: error,
+    });
+    setError(error.message || "Failed to remove specialist");
+  }
+};
 
   const updateFilters = (field, value) => {
     setFilters((prev) => {
