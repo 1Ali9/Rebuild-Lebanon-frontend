@@ -318,24 +318,19 @@ export const usersAPI = {
     "Failed to update profile"
   ),
 
-  updateNeededSpecialists: createEndpoint(
-    "patch",
-    "/users/needed-specialists",
-    "Failed to update specialists",
-    {
-      dataTransformer: (data) => ({ neededSpecialists: data }),
-      bypassPrepareData: true, // Add this to skip prepareRequestData
-    }
-  ),
+updateNeededSpecialists: createEndpoint(
+  "patch",
+  "/users/needed-specialists",
+  "Failed to update specialists",
+  {
+    // Remove dataTransformer since we'll send properly formatted data
+    bypassPrepareData: true
+  }
+),
   updateAvailability: createEndpoint(
     "put",
     "/users/availability",
     "Failed to update availability",
-    {
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-    }
   ),
 };
 

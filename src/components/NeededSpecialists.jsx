@@ -50,7 +50,7 @@ const NeededSpecialists = () => {
     })
   }
 
-  const saveChanges = async () => {
+const saveChanges = async () => {
   if (!initialized) return;
   
   try {
@@ -64,8 +64,11 @@ const NeededSpecialists = () => {
       return;
     }
 
-    // Send the data properly wrapped
-    const response = await usersAPI.updateNeededSpecialists(user.neededSpecialists);
+    // Send the data in correct format
+    const response = await usersAPI.updateNeededSpecialists({
+      neededSpecialists: user.neededSpecialists
+    });
+    
     console.log('Update successful:', response);
     navigate("/client-dashboard");
   } catch (error) {
