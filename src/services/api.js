@@ -374,9 +374,13 @@ removeClient: createEndpoint(
       dataTransformer: (data) => ({ specialistId: data.specialistId || data }) // Handles both object and ID
     }
   ),
-  removeSpecialist: createEndpoint("delete", "/managed/specialists/:id", "Failed to remove specialist"),
+  removeSpecialist: createEndpoint("delete", "/managed/specialists/:id", "Failed to remove specialist",
+    {
+    urlParams: true,
+    
+  }),
   updateSpecialistStatus: createEndpoint(
-    "put",
+    "patch",
     "/managed/specialists/:specialistId/status",
     "Failed to update specialist status",
     {
