@@ -1,13 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Link, useParams, useNavigate } from "react-router-dom"
+import { Link, useParams, useNavigate, useLocation } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import { useData } from "../contexts/DataContext"
 import { messagesAPI, managedAPI, usersAPI } from "../services/api"
 
 const Chat = () => {
-  const { participantName } = useParams()
+  const { participantName,participantId  } = useParams()
   const { user } = useAuth()
   const { managedSpecialists, setManagedSpecialists, managedClients, setManagedClients } = useData()
   const navigate = useNavigate()
@@ -18,53 +18,56 @@ const Chat = () => {
   const [conversationId, setConversationId] = useState(null)
   const [participant, setParticipant] = useState(null)
 
+  const { state } = useLocation()
+
   useEffect(() => {
-    if (participantName) {
-      initializeChat()
-    }
-  }, [participantName])
+  if (participantId) {
+    // Fetch participant name by ID
+    const fetchName = async () => {
+      const userResponse = await usersAPI.getUserById(participantId);
+      setParticipantName(userResponse.fullname);
+    };
+    fetchName();
+    initializeChat();
+  }
+}, [participantId]);
 
   const initializeChat = async () => {
     try {
-      setLoading(true);
-      setError("");
-      
-      // Get participant data
-      const userResponse = user.role === "client" 
-        ? await usersAPI.getSpecialists({ fullname: participantName })
-        : await usersAPI.getClients({ fullname: participantName });
-      
-      const participants = userResponse.data?.specialists || userResponse.data?.clients || [];
-      
-      if (participants.length === 0) {
-        throw new Error("Participant not found");
+      setLoading(true)
+      setError("")
+
+      if (state?.conversationId) {
+        setConversationId(state.conversationId)
+        const messagesResponse = await messagesAPI.getMessages(null, { conversationId: state.conversationId })
+        setMessages(messagesResponse.messages || [])
+      } else {
+        const userResponse = await usersAPI.getSpecialists({ fullname: participantName })
+        const participants = userResponse.data?.specialists || []
+        if (participants.length === 0) throw new Error("Participant not found")
+        const foundParticipant = participants[0]
+        setParticipant(foundParticipant)
+
+        const response = await messagesAPI.createConversation({
+          participantId: foundParticipant._id,
+        })
+
+        if (!response.conversationId) {
+          throw new Error("Failed to create conversation")
+        }
+
+        setConversationId(response.conversationId)
+
+        const messagesResponse = await messagesAPI.getMessages(null, { conversationId: response.conversationId })
+        setMessages(messagesResponse.messages || [])
       }
-      
-      const foundParticipant = participants[0];
-      setParticipant(foundParticipant);
-      
-      // Only send participantId - backend will get current user from auth
-      const response = await messagesAPI.createConversation({
-        participantId: foundParticipant._id
-      });
-      
-      if (!response.conversationId) {
-        throw new Error("Failed to create conversation");
-      }
-      
-      setConversationId(response.conversationId);
-      
-      // Fetch all existing messages for the conversation
-      const messagesResponse = await messagesAPI.getMessages(null, { conversationId: response.conversationId });
-      setMessages(messagesResponse.messages || []);
     } catch (error) {
-      setError(error.message || "Failed to initialize chat");
-      console.error("Error initializing chat:", error);
-      navigate("/conversations");
+      setError(error.message || "Error initializing chat")
+      navigate("/conversations")
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const sendMessage = async () => {
     if (!newMessage.trim()) return
@@ -108,11 +111,11 @@ const Chat = () => {
 
   const isInManagedList = () => {
     if (user.role === "client") {
-      return managedSpecialists.some((ms) => ms.fullname === participantName);
+      return managedSpecialists.some((ms) => ms.fullname === participantName)
     } else {
-      return managedClients.some((mc) => mc.fullname === participantName);
+      return managedClients.some((mc) => mc.fullname === participantName)
     }
-  };
+  }
 
   return (
     <div className="app-container">

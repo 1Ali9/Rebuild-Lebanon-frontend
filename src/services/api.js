@@ -48,6 +48,9 @@ axiosInstance.interceptors.request.use(
 // Enhanced response interceptor with CORS/network error handling
 axiosInstance.interceptors.response.use(
    (response) => {
+    if (response.config.url.includes("/messages")) {
+      return response;
+    }
     // Preserve the original response structure but standardize success flag
     const standardizedResponse = {
       ...response,
@@ -168,52 +171,102 @@ const prepareRequestData = (method, data, endpoint, options = {}) => {
 
 
 const createEndpoint = (method, endpoint, defaultError, options = {}) => {
-return async (data = null, params = null, retries = 1) => {
-  try{
-  console.log('[DEBUG] createEndpoint - Data:', data);
-    console.log('[DEBUG] createEndpoint - Params:', params);
-    let url = endpoint;
-    if (options.urlParams && params) {
-      Object.keys(params).forEach((key) => {
-        console.log('[DEBUG] Replacing :', key, 'with', params[key]);
-        url = url.replace(`:${key}`, encodeURIComponent(params[key]));
-      });
-    }
-    console.log("[DEBUG] Constructed URL:", `${API_URL}${url}`);
+  return async (data = null, params = null, retries = 1) => {
+    try {
+      // Debug logging
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[DEBUG] createEndpoint - Data:', data);
+        console.log('[DEBUG] createEndpoint - Params:', params);
+      }
 
+      // Construct URL with parameters
+      let url = endpoint;
+      if (options.urlParams && params) {
+        Object.keys(params).forEach((key) => {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[DEBUG] Replacing :', key, 'with', params[key]);
+          }
+          url = url.replace(`:${key}`, encodeURIComponent(params[key]));
+        });
+      }
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log("[DEBUG] Constructed URL:", `${API_URL}${url}`);
+      }
+
+      // Prepare request config
       const config = {
         method,
         url,
-        ...prepareRequestData(method, options.dataTransformer ? options.dataTransformer(data) : data, endpoint),
+        ...(options.bypassPrepareData ? { data } : prepareRequestData(method, data, endpoint, options)),
       };
 
-      const response = await axiosInstance(config);
-
-      if (response.data?.user) {
-        response.data.user = {
-          ...response.data.user,
-          governorate: response.data.user.governorate,
-          district: response.data.user.district,
-          role: response.data.user.role,
+      // Special headers if specified
+      if (options.headers) {
+        config.headers = {
+          ...config.headers,
+          ...options.headers
         };
       }
 
-      return response.data;
+      // Make the request
+      const response = await axiosInstance(config);
+
+      // Apply data transformer if exists
+      const responseData = options.dataTransformer 
+        ? options.dataTransformer(response.data) 
+        : response.data;
+
+      // Apply response transformer if exists
+      const transformedResponse = options.responseTransformer
+        ? options.responseTransformer({ 
+            ...response,
+            data: responseData
+          })
+        : responseData;
+
+      // Special handling for user data normalization
+      if (transformedResponse?.user) {
+        transformedResponse.user = {
+          ...transformedResponse.user,
+          governorate: transformedResponse.user.governorate,
+          district: transformedResponse.user.district,
+          role: transformedResponse.user.role,
+        };
+      }
+
+      return transformedResponse;
     } catch (error) {
       console.error(`API ${method.toUpperCase()} ${endpoint} failed:`, error);
 
-      if (error.shouldRetry && retries > 0) {
+      // Handle retry logic for network errors
+      if ((error.isNetworkError || error.shouldRetry) && retries > 0) {
         console.log(`Retrying ${endpoint}... (${retries} attempts left)`);
-        return createEndpoint(method, endpoint, defaultError, options)(data, params, retries - 1);
+        return createEndpoint(method, endpoint, defaultError, options)(
+          data, 
+          params, 
+          retries - 1
+        );
       }
 
-      throw {
+      // Format the error for consistent handling
+      const formattedError = {
         ...error,
         endpoint,
         method,
         message: error.message || defaultError,
         timestamp: new Date().toISOString(),
       };
+
+      // Special handling for validation errors
+      if (error.response?.status === 400 && error.response.data?.errors) {
+        formattedError.validationErrors = Object.entries(error.response.data.errors)
+          .map(([field, err]) => `${field}: ${err.message}`)
+          .join(", ");
+        formattedError.message = "Validation failed";
+      }
+
+      throw formattedError;
     }
   };
 };
@@ -228,12 +281,17 @@ export const authAPI = {
 };
 
 export const usersAPI = {
+  getUserById: createEndpoint(
+    "get", 
+    "/users/id/:id", 
+    "Failed to fetch user",
+    { urlParams: true }
+  ),
   getProfile: createEndpoint("get", "/users/profile", "Failed to fetch profile"),
   getSpecialists: createEndpoint("get", "/users/specialists", "Failed to fetch specialists"),
   getClients: createEndpoint("get", "/users/clients", "Failed to fetch clients"),
   updateProfile: createEndpoint("put", "/users/profile", "Failed to update profile"),
-  // In api.js
-// api.js
+
 updateNeededSpecialists: createEndpoint(
   "patch",
   "/users/needed-specialists",
@@ -251,7 +309,27 @@ updateNeededSpecialists: createEndpoint(
 };
 
 export const messagesAPI = {
-  getConversations: createEndpoint("get", "/messages/conversations", "Failed to fetch conversations"),
+ getConversations: createEndpoint(
+    "get", 
+    "/messages/conversations", 
+    "Failed to fetch conversations",
+    {
+      responseTransformer: (response) => {
+        // Handle case where response.data is an array of conversations
+        if (Array.isArray(response.data)) {
+          return response.data;
+        }
+        
+        // Handle case where conversations are nested
+        if (response.data?.conversations) {
+          return response.data.conversations;
+        }
+        
+        // Fallback to empty array
+        return [];
+      }
+    }
+  ),
   getMessages: createEndpoint("get", "/messages/conversation/:conversationId", "Failed to fetch messages", { urlParams: true }),
   sendMessage: createEndpoint("post", "/messages", "Failed to send message"),
   createConversation: createEndpoint("post", "/messages/conversations", "Failed to create conversation", {
