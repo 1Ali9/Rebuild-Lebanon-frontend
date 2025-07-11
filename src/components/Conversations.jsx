@@ -1,96 +1,111 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Link, useNavigate } from "react-router-dom"
-import { useAuth } from "../contexts/AuthContext"
-import { useData } from "../contexts/DataContext"
-import { messagesAPI } from "../services/api"
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
+import { useData } from "../contexts/DataContext";
+import { messagesAPI } from "../services/api";
 
 const Conversations = () => {
-  const { user } = useAuth()
-  const { conversations, setConversations } = useData()
-  const navigate = useNavigate()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
+  const { user } = useAuth();
+  const { conversations, setConversations } = useData();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchConversations()
-  }, [user])
+    fetchConversations();
+  }, [user]);
 
-const fetchConversations = async () => {
-  try {
-    setLoading(true);
-    setError("");
-    
-    const response = await messagesAPI.getConversations();
-    
-    // Handle different response structures
-    const rawConversations = 
-      Array.isArray(response) ? response : 
-      response?.conversations ? response.conversations :
-      response?.data ? response.data :
-      [];
-    
-    // Transform messages into conversation objects with null checks
-    const conversationsWithParticipants = rawConversations.map(conversation => {
-      // Safe access to properties
-      const lastMessage = conversation.lastMessage || {};
-      const participants = conversation.participants || [];
-      
-      // Find other participant (not current user)
-      const otherParticipant = participants.find(p => 
-        p._id !== user.id && p.toString() !== user.id
+  const fetchConversations = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await messagesAPI.getConversations();
+
+      // Handle different response structures
+      const rawConversations = Array.isArray(response)
+        ? response
+        : response?.conversations
+        ? response.conversations
+        : response?.data
+        ? response.data
+        : [];
+
+      // Transform messages into conversation objects with null checks
+      const conversationsWithParticipants = rawConversations.map(
+        (conversation) => {
+          // Safe access to properties
+          const lastMessage = conversation.lastMessage || {};
+          const participants = conversation.participants || [];
+
+          // Find other participant (not current user)
+          const otherParticipant = participants.find(
+            (p) => p._id !== user.id && p.toString() !== user.id
+          );
+
+          return {
+            ...conversation,
+            otherParticipantId: otherParticipant?._id || otherParticipant,
+            otherParticipantName: otherParticipant?.fullname || "Unknown",
+            lastMessageText: lastMessage.message || "",
+            timestamp:
+              lastMessage.createdAt || conversation.updatedAt || new Date(),
+            unread: conversation.unreadCount > 0,
+          };
+        }
+      );
+      conversationsWithParticipants.map((conv) => console.log(conv));
+      // Sort by most recent message first
+      conversationsWithParticipants.sort(
+        (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
       );
 
-      return {
-        ...conversation,
-        otherParticipantId: otherParticipant?._id || otherParticipant,
-        otherParticipantName: otherParticipant?.fullname || "Unknown",
-        lastMessageText: lastMessage.message || "",
-        timestamp: lastMessage.createdAt || conversation.updatedAt || new Date(),
-        unread: conversation.unreadCount > 0
-      };
-    });
-
-    // Sort by most recent message first
-    conversationsWithParticipants.sort((a, b) => 
-      new Date(b.timestamp) - new Date(a.timestamp)
-    );
-    
-    setConversations(conversationsWithParticipants);
-  } catch (error) {
-    setError(error.message || "Failed to fetch conversations");
-    console.error("Error fetching conversations:", error);
-    setConversations([]);
-  } finally {
-    setLoading(false);
-  }
-};
+      setConversations(conversationsWithParticipants);
+    } catch (error) {
+      setError(error.message || "Failed to fetch conversations");
+      console.error("Error fetching conversations:", error);
+      setConversations([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const openConversation = (conversation) => {
-    navigate(`/chat/${conversation.otherParticipant}`, {
-      state: { conversationId: conversation._id },
-    })
-  }
+    console.log("Conversation ID to be sent: ", conversation?.id);
+    navigate(`/chat/${conversation?.otherParticipantName}`, {
+      state: {
+        conversationId: conversation?.id,
+        participantName: conversation?.otherParticipantName,
+        participantId: conversation?.otherParticipantId,
+      },
+    });
+  };
 
   const getDashboardPath = () => {
-    return user.role === "client" ? "/client-dashboard" : "/specialist-dashboard"
-  }
+    return user.role === "client"
+      ? "/client-dashboard"
+      : "/specialist-dashboard";
+  };
 
   const getBrowsePath = () => {
-    return user.role === "client" ? "/browse-specialists" : "/browse-clients"
-  }
+    return user.role === "client" ? "/browse-specialists" : "/browse-clients";
+  };
 
   const formatDate = (dateString) => {
-    const date = new Date(dateString)
-    const today = new Date()
-    
+    const date = new Date(dateString);
+    const today = new Date();
+
     if (date.toDateString() === today.toDateString()) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     }
-    
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric' })
-  }
+
+    return date.toLocaleDateString([], { month: "short", day: "numeric" });
+  };
 
   return (
     <div className="app-container">
@@ -103,7 +118,10 @@ const fetchConversations = async () => {
               </Link>
               <div>
                 <h2>💬 Messages</h2>
-                <p>Your conversations with {user.role === "client" ? "specialists" : "clients"}</p>
+                <p>
+                  Your conversations with{" "}
+                  {user.role === "client" ? "specialists" : "clients"}
+                </p>
               </div>
             </div>
           </div>
@@ -111,7 +129,7 @@ const fetchConversations = async () => {
             {error && (
               <div className="error-message mb-4">
                 {error}
-                <button 
+                <button
                   onClick={fetchConversations}
                   className="btn btn-sm ml-2"
                 >
@@ -142,7 +160,7 @@ const fetchConversations = async () => {
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <h4 className="font-medium">
-                              {conversation.otherParticipant}
+                              {conversation?.otherParticipantName}
                             </h4>
                             {conversation.unread && (
                               <span className="badge badge-available">New</span>
@@ -164,13 +182,8 @@ const fetchConversations = async () => {
               <div className="dashboard-item">
                 <div className="dashboard-item-content text-center p-4">
                   <div className="mb-4 text-4xl">💬</div>
-                  <p className="mb-4 text-gray-600">
-                    No conversations yet
-                  </p>
-                  <Link 
-                    to={getBrowsePath()} 
-                    className="btn btn-primary"
-                  >
+                  <p className="mb-4 text-gray-600">No conversations yet</p>
+                  <Link to={getBrowsePath()} className="btn btn-primary">
                     Start a conversation
                   </Link>
                 </div>
@@ -180,7 +193,7 @@ const fetchConversations = async () => {
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default Conversations
+export default Conversations;
