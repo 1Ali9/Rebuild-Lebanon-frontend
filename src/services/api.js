@@ -383,11 +383,17 @@ getMessages: createEndpoint(
       }),
     }
   ),
-  markAsRead: createEndpoint(
-    "patch",
-    "/messages/:id/read",
-    "Failed to mark as read"
-  ),
+markConversationAsRead: createEndpoint(
+  "patch",
+  "/messages/conversation/:conversationId/read",
+  "Failed to mark conversation as read",
+  {
+    urlParams: true,
+    dataTransformer: (data) => ({
+      userId: data.userId
+    })
+  }
+)
 };
 
 export const managedAPI = {

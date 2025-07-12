@@ -93,19 +93,34 @@ const Conversations = () => {
     return user.role === "client" ? "/browse-specialists" : "/browse-clients";
   };
 
-  const formatDate = (dateString) => {
+const formatDate = (dateString) => {
+  try {
     const date = new Date(dateString);
-    const today = new Date();
-
-    if (date.toDateString() === today.toDateString()) {
-      return date.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    }
-
-    return date.toLocaleDateString([], { month: "short", day: "numeric" });
-  };
+    if (isNaN(date.getTime())) return "Just now";
+    
+    // // Format as "Month Day, Year at HH:MM AM/PM"
+    // return date.toLocaleString('en-US', {
+    //   month: 'short',
+    //   day: 'numeric',
+    //   year: 'numeric',
+    //   hour: '2-digit',
+    //   minute: '2-digit',
+    //   hour12: true
+    // });
+    
+    // Alternative format: "MM/DD/YYYY, HH:MM AM/PM"
+    return date.toLocaleString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  } catch {
+    return "Just now";
+  }
+};
 
   return (
     <div className="app-container">

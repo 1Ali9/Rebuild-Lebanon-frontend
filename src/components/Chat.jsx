@@ -29,16 +29,16 @@ useEffect(() => {
     try {
       setLoading(true);
       setError("");
-      
+
       // Get both user IDs from state
       const { participantId, currentUserId } = state || {};
-      
+
       if (participantId && currentUserId && !conversationId) {
         console.log("Creating conversation between:", currentUserId, "and", participantId);
-        
+
         const response = await messagesAPI.createConversation({
           participantId,
-          currentUserId  // Send both IDs to backend
+          currentUserId,
         });
 
         if (!response.conversationId) {
@@ -48,19 +48,21 @@ useEffect(() => {
         navigate(location.pathname, {
           state: {
             ...state,
-            conversationId: response.conversationId
+            conversationId: response.conversationId,
           },
-          replace: true
+          replace: true,
         });
 
         const messagesResponse = await messagesAPI.getMessages(null, {
-          conversationId: response.conversationId
+          conversationId: response.conversationId,
         });
         setMessages(messagesResponse?.messages || []);
         return;
       }
 
       if (conversationId) {
+        // Mark messages as read when entering the conversation
+        await messagesAPI.markConversationAsRead(null, { conversationId });
         const messagesResponse = await messagesAPI.getMessages(null, { conversationId });
         setMessages(messagesResponse?.messages || []);
       }
@@ -75,10 +77,29 @@ useEffect(() => {
 
   initializeChat();
 }, [conversationId, participantId, state?.currentUserId]); // Add currentUserId to dependencies
+useEffect(() => {
+  const markMessagesAsRead = async () => {
+    if (!conversationId || !user?._id) return;
+    
+    try {
+      // Call the markAsRead endpoint
+      await messagesAPI.markConversationAsRead({
+        conversationId,
+        userId: user._id
+      });
+      
+      // Optionally refresh conversations list
+      // This would depend on your state management
+    } catch (error) {
+      console.error("Error marking messages as read:", error);
+    }
+  };
 
-
+  markMessagesAsRead();
+}, [conversationId, user?._id]);
 useEffect(() => {
   if (!conversationId) return;
+  
 
   const pollInterval = setInterval(async () => {
     try {
@@ -93,6 +114,7 @@ useEffect(() => {
 
   return () => clearInterval(pollInterval);
 }, [conversationId]);
+
   const sendMessage = async () => {
     if (!newMessage.trim()) return;
     try {
@@ -118,20 +140,26 @@ useEffect(() => {
     }
   };
 
-  const addToManagedList = async () => {
-    try {
-      if (user.role === "client") {
-        const response = await managedAPI.addSpecialist(participantName);
-        setManagedSpecialists((prev) => [...prev, response.data.specialist]);
-      } else {
-        const response = await managedAPI.addClient(participantName);
-        setManagedClients((prev) => [...prev, response.data.client]);
-      }
-    } catch (error) {
-      setError("Failed to add to managed list");
-      console.error("Error adding to managed list:", error);
+
+
+const addToManagedList = async () => {
+  try {
+    if (user.role === "client") {
+      // Change from participantName to participantId
+      const response = await managedAPI.addSpecialist(participantId);
+      setManagedSpecialists((prev) => [...prev, response.data.specialist]);
+    } else {
+      // Change from participantName to participantId
+      const response = await managedAPI.addClient(participantId);
+      setManagedClients((prev) => [...prev, response.data.client]);
     }
-  };
+  } catch (error) {
+    setError("Failed to add to managed list");
+    console.error("Error adding to managed list:", error);
+  }
+};
+
+
 
   const isInManagedList = () => {
     if (user.role === "client") {
