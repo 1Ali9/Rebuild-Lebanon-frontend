@@ -22,64 +22,61 @@ const Chat = () => {
   const [participant, setParticipant] = useState(null);
 
   const { state } = useLocation();
-  const { conversationId, participantName, participantId } = state;
+const { conversationId = null, participantName = '', participantId = null } = state || {};
 
-  useEffect(() => {
-    const initializeChat = async () => {
-      try {
-        setLoading(true);
-        setError("");
-        console.log(state);
-        if (conversationId) {
-          console.log(conversationId, participantId, participantName);
-          const messagesResponse = await messagesAPI.getMessages(null, {
-            conversationId: conversationId,
-          });
-          console.log(messagesResponse?.messages);
-          setMessages(messagesResponse?.messages || []);
-        } else {
-          const userResponse = await usersAPI.getSpecialists({
-            fullname: participantName,
-          });
-          const participants = userResponse.data?.specialists || [];
-          if (participants.length === 0)
-            throw new Error("Participant not found");
-          const foundParticipant = participants[0];
-          setParticipant(foundParticipant);
-
-          const response = await messagesAPI.createConversation({
-            participantId: foundParticipant._id,
-          });
-
-          if (!response.conversationId) {
-            throw new Error("Failed to create conversation");
-          }
-
-          const messagesResponse = await messagesAPI.getMessages(null, {
-            conversationId: conversationId,
-          });
-          console.log(messagesResponse);
-          setMessages(messagesResponse.messages || []);
-        }
-      } catch (error) {
-        setError(error.message || "Error initializing chat");
-        navigate("/conversations");
-      } finally {
-        setLoading(false);
-      }
-    };
-    if (participantId) {
-      // Fetch participant name by ID
-      const fetchName = async () => {
-        const userResponse = await usersAPI.getUserById(null, {
-          id: participantId,
+useEffect(() => {
+  const initializeChat = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      
+      // Get both user IDs from state
+      const { participantId, currentUserId } = state || {};
+      
+      if (participantId && currentUserId && !conversationId) {
+        console.log("Creating conversation between:", currentUserId, "and", participantId);
+        
+        const response = await messagesAPI.createConversation({
+          participantId,
+          currentUserId  // Send both IDs to backend
         });
-        setParticipant(userResponse?.fullname);
-      };
-      fetchName();
-      initializeChat();
+
+        if (!response.conversationId) {
+          throw new Error("Failed to create conversation");
+        }
+
+        navigate(location.pathname, {
+          state: {
+            ...state,
+            conversationId: response.conversationId
+          },
+          replace: true
+        });
+
+        const messagesResponse = await messagesAPI.getMessages(null, {
+          conversationId: response.conversationId
+        });
+        setMessages(messagesResponse?.messages || []);
+        return;
+      }
+
+      if (conversationId) {
+        const messagesResponse = await messagesAPI.getMessages(null, { conversationId });
+        setMessages(messagesResponse?.messages || []);
+      }
+    } catch (error) {
+      console.error("Initialization error:", error);
+      setError(error.message);
+      navigate("/conversations");
+    } finally {
+      setLoading(false);
     }
-  }, [participantId]);
+  };
+
+  initializeChat();
+}, [conversationId, participantId, state?.currentUserId]); // Add currentUserId to dependencies
+
+
 useEffect(() => {
   if (!conversationId) return;
 
@@ -92,7 +89,7 @@ useEffect(() => {
     } catch (error) {
       console.error("Error polling messages:", error);
     }
-  }, 2000); // Check every 3 seconds
+  }, 3000); // Check every 3 seconds
 
   return () => clearInterval(pollInterval);
 }, [conversationId]);
@@ -170,30 +167,39 @@ useEffect(() => {
           <div className="chat-content">
             {error && <div className="error-message">{error}</div>}
             <div className="chat-messages">
-              {Array.isArray(messages) ? (
-                messages.map((message) =>
-                  message ? (
-                    <div
-                      key={message._id}
-                      className={`message ${
-                        message.sender._id !== participantId
-                          ? "message-sent"
-                          : "message-received"
-                      }`}
-                    >
-                      <div className="message-content">
-                        <p>{message.message}</p>
-                        <span className="message-time">
-                          {new Date(message.timestamp).toLocaleTimeString()}
-                        </span>
-                      </div>
-                    </div>
-                  ) : null
-                )
+  {Array.isArray(messages) ? (
+    messages.map((message) =>
+      message ? (
+        <div
+          key={message._id}
+          className={`message ${
+            message.sender._id !== participantId
+              ? "message-sent"
+              : "message-received"
+          }`}
+        >
+          <div className="message-content">
+            <p>{message.message}</p>
+            <span className="message-time">
+              {message.createdAt ? (
+                new Date(message.createdAt).toLocaleString([], {
+                  day: '2-digit',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })
               ) : (
-                <p>No messages to display</p>
+                'Just now'
               )}
-            </div>
+            </span>
+          </div>
+        </div>
+      ) : null
+    )
+  ) : (
+    <p>No messages to display</p>
+  )}
+</div>
             <div className="chat-input">
               <input
                 type="text"

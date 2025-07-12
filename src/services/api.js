@@ -356,12 +356,22 @@ export const messagesAPI = {
       },
     }
   ),
-  getMessages: createEndpoint(
-    "get",
-    "/messages/conversation/:conversationId",
-    "Failed to fetch messages",
-    { urlParams: true }
-  ),
+getMessages: createEndpoint(
+  "get",
+  "/messages/conversation/:conversationId",
+  "Failed to fetch messages",
+  { 
+    urlParams: true,
+    responseTransformer: (response) => {
+      return {
+        messages: response.data?.messages?.map(msg => ({
+          ...msg,
+          timestamp: msg.createdAt || new Date() // Use createdAt as the primary source
+        })) || []
+      };
+    }
+  }
+),
   sendMessage: createEndpoint("post", "/messages", "Failed to send message"),
   createConversation: createEndpoint(
     "post",
