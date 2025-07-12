@@ -19,110 +19,131 @@ const Chat = () => {
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [participant, setParticipant] = useState(null);
+  const [conversation, setConversation] = useState(null);
 
   const { state } = useLocation();
-const { conversationId = null, participantName = '', participantId = null } = state || {};
+  const {
+    conversationId = null,
+    participantName = "",
+    participantId = null,
+  } = state || {};
+  managedSpecialists?.map((ms) => console.log(ms));
+  useEffect(() => {
+    const initializeChat = async () => {
+      try {
+        setLoading(true);
+        setError("");
+        setConversation(conversationId);
+        // Get both user IDs from state
+        const { participantId, currentUserId } = state || {};
 
-useEffect(() => {
-  const initializeChat = async () => {
-    try {
-      setLoading(true);
-      setError("");
+        if (participantId && currentUserId && !conversation) {
+          console.log(
+            "Creating conversation between:",
+            currentUserId,
+            "and",
+            participantId
+          );
 
-      // Get both user IDs from state
-      const { participantId, currentUserId } = state || {};
+          const response = await messagesAPI.createConversation({
+            participantId,
+            currentUserId,
+          });
 
-      if (participantId && currentUserId && !conversationId) {
-        console.log("Creating conversation between:", currentUserId, "and", participantId);
+          if (!response.conversationId) {
+            throw new Error("Failed to create conversation");
+          }
 
-        const response = await messagesAPI.createConversation({
-          participantId,
-          currentUserId,
-        });
+          navigate(location.pathname, {
+            state: {
+              ...state,
+              conversationId: response.conversationId,
+            },
+            replace: true,
+          });
 
-        if (!response.conversationId) {
-          throw new Error("Failed to create conversation");
+          const messagesResponse = await messagesAPI.getMessages(null, {
+            conversationId: response.conversationId,
+          });
+          setMessages(messagesResponse?.messages || []);
+          return;
         }
 
-        navigate(location.pathname, {
-          state: {
-            ...state,
-            conversationId: response.conversationId,
-          },
-          replace: true,
+        if (conversation) {
+          // Mark messages as read when entering the conversation
+          await messagesAPI.markConversationAsRead(null, {
+            conversationId: conversation,
+          });
+          const messagesResponse = await messagesAPI.getMessages(null, {
+            conversationId: conversation,
+          });
+          setMessages(messagesResponse?.messages || []);
+        }
+      } catch (error) {
+        console.error("Initialization error:", error);
+        setError(error.message);
+        navigate("/conversations");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeChat();
+  }, [
+    conversation,
+    participantId,
+    state?.currentUserId,
+    managedSpecialists,
+    managedClients,
+  ]); // Add currentUserId to dependencies
+  useEffect(() => {
+    const markMessagesAsRead = async () => {
+      if (!conversation || !user?._id) return;
+
+      try {
+        // Call the markAsRead endpoint
+        await messagesAPI.markConversationAsRead({
+          conversationId: conversation,
+          userId: user._id,
         });
 
+        // Optionally refresh conversations list
+        // This would depend on your state management
+      } catch (error) {
+        console.error("Error marking messages as read:", error);
+      }
+    };
+
+    markMessagesAsRead();
+  }, [conversation, user?._id]);
+  useEffect(() => {
+    if (!conversation) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
         const messagesResponse = await messagesAPI.getMessages(null, {
-          conversationId: response.conversationId,
+          conversationId: conversation,
         });
         setMessages(messagesResponse?.messages || []);
-        return;
+      } catch (error) {
+        console.error("Error polling messages:", error);
       }
+    }, 3000); // Check every 3 seconds
 
-      if (conversationId) {
-        // Mark messages as read when entering the conversation
-        await messagesAPI.markConversationAsRead(null, { conversationId });
-        const messagesResponse = await messagesAPI.getMessages(null, { conversationId });
-        setMessages(messagesResponse?.messages || []);
-      }
-    } catch (error) {
-      console.error("Initialization error:", error);
-      setError(error.message);
-      navigate("/conversations");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  initializeChat();
-}, [conversationId, participantId, state?.currentUserId]); // Add currentUserId to dependencies
-useEffect(() => {
-  const markMessagesAsRead = async () => {
-    if (!conversationId || !user?._id) return;
-    
-    try {
-      // Call the markAsRead endpoint
-      await messagesAPI.markConversationAsRead({
-        conversationId,
-        userId: user._id
-      });
-      
-      // Optionally refresh conversations list
-      // This would depend on your state management
-    } catch (error) {
-      console.error("Error marking messages as read:", error);
-    }
-  };
-
-  markMessagesAsRead();
-}, [conversationId, user?._id]);
-useEffect(() => {
-  if (!conversationId) return;
-  
-
-  const pollInterval = setInterval(async () => {
-    try {
-      const messagesResponse = await messagesAPI.getMessages(null, {
-        conversationId: conversationId,
-      });
-      setMessages(messagesResponse?.messages || []);
-    } catch (error) {
-      console.error("Error polling messages:", error);
-    }
-  }, 3000); // Check every 3 seconds
-
-  return () => clearInterval(pollInterval);
-}, [conversationId]);
+    return () => clearInterval(pollInterval);
+  }, [conversation]);
 
   const sendMessage = async () => {
     if (!newMessage.trim()) return;
     try {
       setLoading(true);
       const response = await messagesAPI.sendMessage({
-        conversationId,
+        conversationId: conversation,
         message: newMessage,
+        recipientId: participantId,
       });
+      setConversation(response?.data?.conversationId);
+      console.log("holding convo id: ", conversation);
       setMessages((prev) => [...prev, response?.data?.message]);
       setNewMessage("");
     } catch (error) {
@@ -140,32 +161,31 @@ useEffect(() => {
     }
   };
 
-
-
-const addToManagedList = async () => {
-  try {
-    if (user.role === "client") {
-      // Change from participantName to participantId
-      const response = await managedAPI.addSpecialist(participantId);
-      setManagedSpecialists((prev) => [...prev, response.data.specialist]);
-    } else {
-      // Change from participantName to participantId
-      const response = await managedAPI.addClient(participantId);
-      setManagedClients((prev) => [...prev, response.data.client]);
+  const addToManagedList = async () => {
+    try {
+      if (user.role === "client") {
+        // Change from participantName to participantId
+        console.log("specislist id (frontend): ", participantId);
+        const response = await managedAPI.addSpecialist({
+          specialistId: participantId,
+        });
+        setManagedSpecialists((prev) => [...prev, response?.data?.specialist]);
+      } else {
+        // Change from participantName to participantId
+        const response = await managedAPI.addClient(participantId);
+        setManagedClients((prev) => [...prev, response?.data?.client]);
+      }
+    } catch (error) {
+      setError("Failed to add to managed list");
+      console.error("Error adding to managed list:", error);
     }
-  } catch (error) {
-    setError("Failed to add to managed list");
-    console.error("Error adding to managed list:", error);
-  }
-};
-
-
+  };
 
   const isInManagedList = () => {
     if (user.role === "client") {
-      return managedSpecialists.some((ms) => ms.fullname === participantName);
+      return managedSpecialists.some((ms) => ms?.fullname === participantName);
     } else {
-      return managedClients.some((mc) => mc.fullname === participantName);
+      return managedClients.some((mc) => mc?.fullname === participantName);
     }
   };
 
@@ -195,39 +215,37 @@ const addToManagedList = async () => {
           <div className="chat-content">
             {error && <div className="error-message">{error}</div>}
             <div className="chat-messages">
-  {Array.isArray(messages) ? (
-    messages.map((message) =>
-      message ? (
-        <div
-          key={message._id}
-          className={`message ${
-            message.sender._id !== participantId
-              ? "message-sent"
-              : "message-received"
-          }`}
-        >
-          <div className="message-content">
-            <p>{message.message}</p>
-            <span className="message-time">
-              {message.createdAt ? (
-                new Date(message.createdAt).toLocaleString([], {
-                  day: '2-digit',
-                  month: 'short',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })
+              {Array.isArray(messages) ? (
+                messages.map((message) =>
+                  message ? (
+                    <div
+                      key={message._id}
+                      className={`message ${
+                        message.sender._id !== participantId
+                          ? "message-sent"
+                          : "message-received"
+                      }`}
+                    >
+                      <div className="message-content">
+                        <p>{message.message}</p>
+                        <span className="message-time">
+                          {message.createdAt
+                            ? new Date(message.createdAt).toLocaleString([], {
+                                day: "2-digit",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "Just now"}
+                        </span>
+                      </div>
+                    </div>
+                  ) : null
+                )
               ) : (
-                'Just now'
+                <p>No messages to display</p>
               )}
-            </span>
-          </div>
-        </div>
-      ) : null
-    )
-  ) : (
-    <p>No messages to display</p>
-  )}
-</div>
+            </div>
             <div className="chat-input">
               <input
                 type="text"

@@ -318,19 +318,19 @@ export const usersAPI = {
     "Failed to update profile"
   ),
 
-updateNeededSpecialists: createEndpoint(
-  "patch",
-  "/users/needed-specialists",
-  "Failed to update specialists",
-  {
-    // Remove dataTransformer since we'll send properly formatted data
-    bypassPrepareData: true
-  }
-),
+  updateNeededSpecialists: createEndpoint(
+    "patch",
+    "/users/needed-specialists",
+    "Failed to update specialists",
+    {
+      // Remove dataTransformer since we'll send properly formatted data
+      bypassPrepareData: true,
+    }
+  ),
   updateAvailability: createEndpoint(
     "put",
     "/users/availability",
-    "Failed to update availability",
+    "Failed to update availability"
   ),
 };
 
@@ -356,22 +356,23 @@ export const messagesAPI = {
       },
     }
   ),
-getMessages: createEndpoint(
-  "get",
-  "/messages/conversation/:conversationId",
-  "Failed to fetch messages",
-  { 
-    urlParams: true,
-    responseTransformer: (response) => {
-      return {
-        messages: response.data?.messages?.map(msg => ({
-          ...msg,
-          timestamp: msg.createdAt || new Date() // Use createdAt as the primary source
-        })) || []
-      };
+  getMessages: createEndpoint(
+    "get",
+    "/messages/conversation/:conversationId",
+    "Failed to fetch messages",
+    {
+      urlParams: true,
+      responseTransformer: (response) => {
+        return {
+          messages:
+            response.data?.messages?.map((msg) => ({
+              ...msg,
+              timestamp: msg.createdAt || new Date(), // Use createdAt as the primary source
+            })) || [],
+        };
+      },
     }
-  }
-),
+  ),
   sendMessage: createEndpoint("post", "/messages", "Failed to send message"),
   createConversation: createEndpoint(
     "post",
@@ -383,17 +384,17 @@ getMessages: createEndpoint(
       }),
     }
   ),
-markConversationAsRead: createEndpoint(
-  "patch",
-  "/messages/conversation/:conversationId/read",
-  "Failed to mark conversation as read",
-  {
-    urlParams: true,
-    dataTransformer: (data) => ({
-      userId: data.userId
-    })
-  }
-)
+  markConversationAsRead: createEndpoint(
+    "patch",
+    "/messages/conversation/:conversationId/read",
+    "Failed to mark conversation as read",
+    {
+      urlParams: true,
+      dataTransformer: (data) => ({
+        userId: data.userId,
+      }),
+    }
+  ),
 };
 
 export const managedAPI = {
@@ -421,8 +422,8 @@ export const managedAPI = {
       urlParams: true,
       dataTransformer: (data) => ({
         isDone: data.isDone,
-        clientId: data.clientId
-      })
+        clientId: data.clientId,
+      }),
     }
   ),
   getManagedClients: createEndpoint(
@@ -435,15 +436,18 @@ export const managedAPI = {
     "/managed/specialists",
     "Failed to add specialist",
     {
-      dataTransformer: (data) => ({ specialistId: data.specialistId || data }), // Handles both object and ID
+      dataTransformer: (data) => ({ specialistId: data?.specialistId || data }), // Handles both object and ID
     }
   ),
-  removeSpecialist: createEndpoint("delete", "/managed/specialists/:id", "Failed to remove specialist",
+  removeSpecialist: createEndpoint(
+    "delete",
+    "/managed/specialists/:id",
+    "Failed to remove specialist",
     {
-    urlParams: true,
-    
-  }),
- 
+      urlParams: true,
+    }
+  ),
+
   updateSpecialistStatus: createEndpoint(
     "patch",
     "/managed/relationships/specialist/:relationshipId/status",
@@ -452,8 +456,8 @@ export const managedAPI = {
       urlParams: true,
       dataTransformer: (data) => ({
         isDone: data.isDone,
-        specialistId: data.specialistId
-      })
+        specialistId: data.specialistId,
+      }),
     }
   ),
   getManagedSpecialists: createEndpoint(

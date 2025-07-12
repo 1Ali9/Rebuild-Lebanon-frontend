@@ -20,7 +20,7 @@ const BrowseSpecialists = () => {
   const [loading, setLoading] = useState({
     specialists: false,
     managed: false,
-    initialLoad: true
+    initialLoad: true,
   });
   const [error, setError] = useState("");
   const [filters, setFilters] = useState({
@@ -33,17 +33,17 @@ const BrowseSpecialists = () => {
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        setLoading(prev => ({ ...prev, managed: true }));
+        setLoading((prev) => ({ ...prev, managed: true }));
         const response = await managedAPI.getManagedSpecialists();
         setManagedSpecialists(response.data?.specialists || []);
       } catch (error) {
         console.error("Error fetching managed specialists:", error);
         setError("Failed to load your specialist list");
       } finally {
-        setLoading(prev => ({ ...prev, managed: false, initialLoad: false }));
+        setLoading((prev) => ({ ...prev, managed: false, initialLoad: false }));
       }
     };
-    
+
     fetchInitialData();
     fetchSpecialists();
   }, []);
@@ -56,7 +56,7 @@ const BrowseSpecialists = () => {
 
   const fetchSpecialists = async () => {
     try {
-      setLoading(prev => ({ ...prev, specialists: true }));
+      setLoading((prev) => ({ ...prev, specialists: true }));
       setError("");
 
       const params = {
@@ -77,83 +77,82 @@ const BrowseSpecialists = () => {
       console.error("Error fetching specialists:", error);
       setSpecialists([]);
     } finally {
-      setLoading(prev => ({ ...prev, specialists: false }));
+      setLoading((prev) => ({ ...prev, specialists: false }));
     }
   };
 
   const fetchManagedSpecialists = async () => {
     try {
-      setLoading(prev => ({ ...prev, managed: true }));
+      setLoading((prev) => ({ ...prev, managed: true }));
       const response = await managedAPI.getManagedSpecialists();
       setManagedSpecialists(response.data?.specialists || []);
     } catch (error) {
       console.error("Error fetching managed specialists:", error);
       setError("Failed to refresh your specialist list");
     } finally {
-      setLoading(prev => ({ ...prev, managed: false }));
+      setLoading((prev) => ({ ...prev, managed: false }));
     }
   };
 
-const addSpecialistToManaged = async (specialist) => {
-  try {
-    setError("");
-    console.log("Adding specialist:", specialist._id);
+  const addSpecialistToManaged = async (specialist) => {
+    try {
+      setError("");
+      console.log("Adding specialist:", specialist._id);
 
-    // Check if already managed using both ID and relationship status
-    const isAlreadyManaged = managedSpecialists.some(
-      (ms) => ms._id === specialist._id
-    );
-    
-    if (isAlreadyManaged) {
-      await fetchManagedSpecialists(); // Refresh list if already managed
-      return;
-    }
-
-    // Send the specialist ID in the correct format
-    const response = await managedAPI.addSpecialist({ 
-      specialistId: specialist._id 
-    });
-
-    if (!response.success) {
-      throw new Error(response.message || "Failed to add specialist");
-    }
-
-    // Update state optimistically while waiting for refresh
-    setManagedSpecialists(prev => [
-      ...prev, 
-      {
-        ...specialist,
-        isDone: false,
-        dateAdded: new Date().toISOString(),
-        relationshipId: response.relationshipId // Make sure backend returns this
-      }
-    ]);
-
-    // Force refresh to ensure consistency
-    await fetchManagedSpecialists();
-    setError("");
-
-  } catch (error) {
-    console.error("Full error:", error);
-    console.error("Backend response:", error.response?.data);
-    
-    // Revert optimistic update if error occurred
-    setManagedSpecialists(prev => 
-      prev.filter(s => s._id !== specialist._id)
-    );
-    
-    if (error.code === 409) {
-      setError("This specialist was already in your list");
-      await fetchManagedSpecialists();
-    } else {
-      setError(
-        error.response?.data?.message || 
-        error.message || 
-        "Failed to add specialist to managed list"
+      // Check if already managed using both ID and relationship status
+      const isAlreadyManaged = managedSpecialists.some(
+        (ms) => ms._id === specialist._id
       );
+
+      if (isAlreadyManaged) {
+        await fetchManagedSpecialists(); // Refresh list if already managed
+        return;
+      }
+
+      // Send the specialist ID in the correct format
+      const response = await managedAPI.addSpecialist({
+        specialistId: specialist._id,
+      });
+
+      if (!response.success) {
+        throw new Error(response.message || "Failed to add specialist");
+      }
+
+      // Update state optimistically while waiting for refresh
+      setManagedSpecialists((prev) => [
+        ...prev,
+        {
+          ...specialist,
+          isDone: false,
+          dateAdded: new Date().toISOString(),
+          relationshipId: response.relationshipId, // Make sure backend returns this
+        },
+      ]);
+
+      // Force refresh to ensure consistency
+      await fetchManagedSpecialists();
+      setError("");
+    } catch (error) {
+      console.error("Full error:", error);
+      console.error("Backend response:", error.response?.data);
+
+      // Revert optimistic update if error occurred
+      setManagedSpecialists((prev) =>
+        prev.filter((s) => s._id !== specialist._id)
+      );
+
+      if (error.code === 409) {
+        setError("This specialist was already in your list");
+        await fetchManagedSpecialists();
+      } else {
+        setError(
+          error.response?.data?.message ||
+            error.message ||
+            "Failed to add specialist to managed list"
+        );
+      }
     }
-  }
-};
+  };
 
   const updateFilters = (field, value) => {
     setFilters((prev) => ({
@@ -288,7 +287,7 @@ const addSpecialistToManaged = async (specialist) => {
                     const isManaged = managedSpecialists.some(
                       (ms) => ms._id === specialist._id
                     );
-                    
+
                     return (
                       <div key={specialist._id} className="dashboard-item">
                         <div className="dashboard-item-header">
@@ -317,26 +316,31 @@ const addSpecialistToManaged = async (specialist) => {
                             <button
                               className="btn btn-primary flex-1"
                               onClick={() =>
-                                navigate(`/chat/${specialist.fullname}`)
+                                navigate(`/chat/${specialist.fullname}`, {
+                                  state: {
+                                    participantId: specialist._id,
+                                    participantName: specialist.fullname,
+                                  },
+                                })
                               }
                             >
                               💬 Message
                             </button>
                             <button
-                                  className={`btn btn-black flex-1 ${
-                                    isManaged ? "added-specialist" : ""
-                                  }`}
-                                  onClick={() => addSpecialistToManaged(specialist)}
-                                  disabled={isManaged || loading.managed}
-                                >
-                                  {loading.managed ? (
-                                    <span className="loading-spinner-small" />
-                                  ) : isManaged ? (
-                                    "✓ Added"
-                                  ) : (
-                                    "+ Add Specialist"
-                                  )}
-                                </button>
+                              className={`btn btn-black flex-1 ${
+                                isManaged ? "added-specialist" : ""
+                              }`}
+                              onClick={() => addSpecialistToManaged(specialist)}
+                              disabled={isManaged || loading.managed}
+                            >
+                              {loading.managed ? (
+                                <span className="loading-spinner-small" />
+                              ) : isManaged ? (
+                                "✓ Added"
+                              ) : (
+                                "+ Add Specialist"
+                              )}
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -345,13 +349,15 @@ const addSpecialistToManaged = async (specialist) => {
                 </div>
               )}
 
-              {!loading.initialLoad && !loading.specialists && specialists.length === 0 && (
-                <div className="dashboard-item">
-                  <div className="dashboard-item-content text-center p-4">
-                    <p>No specialists found matching your criteria.</p>
+              {!loading.initialLoad &&
+                !loading.specialists &&
+                specialists.length === 0 && (
+                  <div className="dashboard-item">
+                    <div className="dashboard-item-content text-center p-4">
+                      <p>No specialists found matching your criteria.</p>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
             </div>
           </div>
         </div>
