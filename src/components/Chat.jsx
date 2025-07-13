@@ -28,74 +28,66 @@ const Chat = () => {
     participantId = null,
   } = state || {};
   managedSpecialists?.map((ms) => console.log(ms));
-  useEffect(() => {
-    const initializeChat = async () => {
-      try {
-        setLoading(true);
-        setError("");
+  
+
+useEffect(() => {
+  const initializeChat = async () => {
+    try {
+      setLoading(true);
+      
+      // Case 1: We already have a conversation ID - just load messages
+      if (conversationId) {
+        const messagesResponse = await messagesAPI.getMessages(null, {
+          conversationId: conversationId,
+        });
+        setMessages(messagesResponse?.messages || []);
         setConversation(conversationId);
-        // Get both user IDs from state
-        const { participantId, currentUserId } = state || {};
-
-        if (participantId && currentUserId && !conversation) {
-          console.log(
-            "Creating conversation between:",
-            currentUserId,
-            "and",
-            participantId
-          );
-
-          const response = await messagesAPI.createConversation({
-            participantId,
-            currentUserId,
-          });
-
-          if (!response.conversationId) {
-            throw new Error("Failed to create conversation");
-          }
-
+        return;
+      }
+      
+      // Case 2: No conversation but we have participant info - check if conversation exists
+      if (participantId && user?._id) {
+        // First try to find existing conversation
+        const existingConvos = await messagesAPI.getConversations();
+        const existingConvo = existingConvos.find(conv => 
+          conv.participants.some(p => p._id === participantId)
+        );
+        
+        if (existingConvo) {
+          // Use existing conversation
+          setConversation(existingConvo._id);
           navigate(location.pathname, {
             state: {
               ...state,
-              conversationId: response.conversationId,
+              conversationId: existingConvo._id,
             },
             replace: true,
           });
-
           const messagesResponse = await messagesAPI.getMessages(null, {
-            conversationId: response.conversationId,
+            conversationId: existingConvo._id,
           });
           setMessages(messagesResponse?.messages || []);
           return;
         }
-
-        if (conversation) {
-          // Mark messages as read when entering the conversation
-          await messagesAPI.markConversationAsRead(null, {
-            conversationId: conversation,
-          });
-          const messagesResponse = await messagesAPI.getMessages(null, {
-            conversationId: conversation,
-          });
-          setMessages(messagesResponse?.messages || []);
-        }
-      } catch (error) {
-        console.error("Initialization error:", error);
-        setError(error.message);
-        navigate("/conversations");
-      } finally {
-        setLoading(false);
+        
+        // No existing conversation - don't create yet (wait for first message)
+        setConversation(null);
+        setMessages([]);
       }
-    };
+    } catch (error) {
+      console.error("Initialization error:", error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    initializeChat();
-  }, [
-    conversation,
-    participantId,
-    state?.currentUserId,
-    managedSpecialists,
-    managedClients,
-  ]); // Add currentUserId to dependencies
+  initializeChat();
+}, [conversationId, participantId, user?._id]);
+  
+
+
+
   useEffect(() => {
     const markMessagesAsRead = async () => {
       if (!conversation || !user?._id) return;
@@ -116,43 +108,121 @@ const Chat = () => {
 
     markMessagesAsRead();
   }, [conversation, user?._id]);
-  useEffect(() => {
-    if (!conversation) return;
+useEffect(() => {
+  if (!conversation && !participantId) return;
 
-    const pollInterval = setInterval(async () => {
-      try {
+  const pollMessages = async () => {
+    try {
+      // If we have a conversation, poll for its messages
+      if (conversation) {
         const messagesResponse = await messagesAPI.getMessages(null, {
           conversationId: conversation,
         });
         setMessages(messagesResponse?.messages || []);
-      } catch (error) {
-        console.error("Error polling messages:", error);
       }
-    }, 3000); // Check every 3 seconds
-
-    return () => clearInterval(pollInterval);
-  }, [conversation]);
-
-  const sendMessage = async () => {
-    if (!newMessage.trim()) return;
-    try {
-      setLoading(true);
-      const response = await messagesAPI.sendMessage({
-        conversationId: conversation,
-        message: newMessage,
-        recipientId: participantId,
-      });
-      setConversation(response?.data?.conversationId);
-      console.log("holding convo id: ", conversation);
-      setMessages((prev) => [...prev, response?.data?.message]);
-      setNewMessage("");
+      // If we don't have conversation but have participant, we could check for new conversations
+      // This is optional based on your requirements
     } catch (error) {
-      setError("Failed to send message");
-      console.error("Error sending message:", error);
-    } finally {
-      setLoading(false);
+      console.error("Error polling messages:", error);
     }
   };
+
+  // Poll immediately
+  pollMessages();
+  
+  // Then set up interval
+  const pollInterval = setInterval(pollMessages, 3000);
+  return () => clearInterval(pollInterval);
+}, [conversation, participantId]); // Add participantId to dependencies
+
+const sendMessage = async () => {
+  if (!newMessage.trim()) return;
+
+  try {
+    setLoading(true);
+    let convoId = conversation;
+
+    // If no conversation exists, create one first
+    if (!convoId && participantId && user?._id) {
+      const createResponse = await messagesAPI.createConversation({
+        participantId,
+        currentUserId: user._id,
+      });
+
+      if (!createResponse.conversationId) {
+        throw new Error("Failed to create conversation");
+      }
+
+      convoId = createResponse.conversationId;
+      
+      // Immediately update state with the new conversation
+      setConversation(convoId);
+      
+      // Update route state to persist the conversation ID
+      navigate(location.pathname, {
+        state: {
+          ...state,
+          conversationId: convoId,
+        },
+        replace: true,
+      });
+
+      // Return early to let the polling effect handle the messages
+      // This ensures we don't try to send before the conversation is ready
+      setNewMessage("");
+      return;
+    }
+
+    // Now send the message to the existing conversation
+    const messageResponse = await messagesAPI.sendMessage({
+      conversationId: convoId,
+      message: newMessage,
+      recipientId: participantId,
+    });
+
+    // Optimistically update the UI
+    setMessages(prev => [...prev, {
+      _id: Date.now().toString(), // temporary ID
+      message: newMessage,
+      sender: { _id: user._id },
+      createdAt: new Date().toISOString(),
+    }]);
+    
+    setNewMessage("");
+
+  } catch (error) {
+    setError("Failed to send message");
+    console.error("Error sending message:", error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+// Modified polling effect
+useEffect(() => {
+  if (!conversation) return;
+
+  const pollMessages = async () => {
+    try {
+      const messagesResponse = await messagesAPI.getMessages(null, {
+        conversationId: conversation,
+      });
+      setMessages(messagesResponse?.messages || []);
+    } catch (error) {
+      console.error("Error polling messages:", error);
+    }
+  };
+
+  // Poll immediately when conversation is set
+  pollMessages();
+  
+  // Then set up interval polling
+  const pollInterval = setInterval(pollMessages, 3000);
+
+  return () => clearInterval(pollInterval);
+}, [conversation]);
+
+
 
   const handleKeyPress = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -180,14 +250,14 @@ const Chat = () => {
       console.error("Error adding to managed list:", error);
     }
   };
+const isInManagedList = () => {
+  if (user.role === "client") {
+    return managedSpecialists.some((ms) => ms?._id === participantId);
+  } else {
+    return managedClients.some((mc) => mc?._id === participantId);
+  }
+};
 
-  const isInManagedList = () => {
-    if (user.role === "client") {
-      return managedSpecialists.some((ms) => ms?.fullname === participantName);
-    } else {
-      return managedClients.some((mc) => mc?.fullname === participantName);
-    }
-  };
 
   return (
     <div className="app-container">

@@ -72,16 +72,16 @@ const Conversations = () => {
     }
   };
 
-  const openConversation = (conversation) => {
-    console.log("Conversation ID to be sent: ", conversation?.id);
-    navigate(`/chat/${conversation?.otherParticipantName}`, {
-      state: {
-        conversationId: conversation?.id,
-        participantName: conversation?.otherParticipantName,
-        participantId: conversation?.otherParticipantId,
-      },
-    });
-  };
+const openConversation = (conversation) => {
+  navigate(`/chat/${conversation?.otherParticipantName}`, {
+    state: {
+      conversationId: conversation?._id || conversation?.id, // Try both common ID fields
+      participantName: conversation?.otherParticipantName,
+      participantId: conversation?.otherParticipantId,
+      currentUserId: user.id // Pass current user ID explicitly
+    },
+  });
+};
 
   const getDashboardPath = () => {
     return user.role === "client"

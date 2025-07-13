@@ -252,7 +252,13 @@ const addClientToManaged = async (client) => {
                         <div className="flex gap-2">
                           <button
                             className="btn btn-primary flex-1"
-                            onClick={() => navigate(`/chat/${client.fullname}`)}
+                            onClick={() => navigate(`/chat/${client.fullname}`, {
+                                  state: {
+                                    participantId: client._id,
+                                    participantName: client.fullname,
+                                    currentUserId: user._id,
+                                  },
+                                })}
                           >
                             💬 Message
                           </button>

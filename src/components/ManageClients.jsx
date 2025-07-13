@@ -388,7 +388,14 @@ const toggleClientDone = async (clientId) => {
                           </button>
                           <button
                             className="btn btn-nav"
-                            onClick={() => navigate(`/chat/${client.fullname}`)}
+                            onClick={() => navigate(`/chat/${client.fullname}`, {
+                                  state: {
+                                    participantId: client._id,
+                                    participantName: client.fullname,
+                                    currentUserId: user._id,
+                                  },
+                                })
+                              }
                           >
                             💬
                           </button>

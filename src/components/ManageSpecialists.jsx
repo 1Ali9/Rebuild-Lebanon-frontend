@@ -436,7 +436,14 @@ const toggleSpecialistDone = async (specialistId) => {
                           <button
                             className="btn btn-nav"
                             onClick={() =>
-                              navigate(`/chat/${specialist.fullname}`)
+                              navigate(`/chat/${specialist.fullname}`, {
+                                  state: {
+                                    participantId: specialist._id,
+                                    participantName: specialist.fullname,
+                                    currentUserId: user._id,
+                                    fromExternal: true 
+                                  },
+                                })
                             }
                           >
                             💬

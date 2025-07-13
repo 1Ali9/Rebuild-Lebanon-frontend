@@ -320,6 +320,8 @@ const BrowseSpecialists = () => {
                                   state: {
                                     participantId: specialist._id,
                                     participantName: specialist.fullname,
+                                    currentUserId: user._id,
+                                    fromExternal: true 
                                   },
                                 })
                               }
